@@ -1,0 +1,11 @@
+# EDA
+pillow
+pandas
+matplotlib
+seaborn
+numpy<2
+geopandas
+shapely
+torch
+torchvision
+tqdm
