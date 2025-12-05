@@ -1,7 +1,7 @@
 # IPEO: Hurricane Damage Detection
 
 ## Data Setup
-Download the data ZIP from [Google Drive](https://drive.google.com/file/d/1vWwI8c0tx1DEq9fjeTU53inhhoVmoDYN/view?usp=sharing) and unzip it so `train/`, `validation/`, and `test/` live under `data/` as shown below.
+Download the data ZIP from [Google Drive](https://drive.google.com/file/d/1vWwI8c0tx1DEq9fjeTU53inhhoVmoDYN/view?usp=sharing) and unzip it so `train/`, `validation/`, and `test/` folders are under `data/` as:
 ```
 data/
   train/damage
