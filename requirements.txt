@@ -9,3 +9,6 @@ shapely
 torch
 torchvision
 tqdm
+scikit-learn
+wandb
+ipywidgets
