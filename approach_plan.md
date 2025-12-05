@@ -5,7 +5,7 @@
 - Maintain reproducibility and clear evaluation: accuracy/F1 plus calibration metrics on the provided val/test splits.
 - Mitigate data issues discovered in EDA: class imbalance, co-located/conflicting labels, potential leakage, and noise.
 
-## Key EDA Findings Driving the Approach
+## Key EDA Findings
 - **Class balance:** Train skewed (~13k damage / 6k no_damage); val/test balanced (1k/1k). → Need imbalance handling to avoid bias toward damage.
 - **Co-located/conflicting labels:** Thousands of coordinates appear with both labels; many coords have multiple images. → Expect label noise; guard against overconfidence and leakage.
 - **Duplicates:** Exact duplicates exist across splits. → Remove or exclude train duplicates overlapping val/test to avoid leakage.
