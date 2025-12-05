@@ -1,4 +1,4 @@
-# EDA
+# EDA / training deps
 pillow
 pandas
 matplotlib
@@ -6,9 +6,9 @@ seaborn
 numpy<2
 geopandas
 shapely
-torch
-torchvision
 tqdm
 scikit-learn
 wandb
 ipywidgets
+
+# Install PyTorch separately (GPU/CPU instructions in README).

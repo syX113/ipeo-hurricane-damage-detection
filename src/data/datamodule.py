@@ -5,8 +5,8 @@ import torch
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torchvision.datasets import ImageFolder
 
-from hurricane.config import TrainConfig
-from hurricane.data.transforms import build_transforms
+from config import TrainConfig
+from data.transforms import build_transforms
 
 
 class DataModule:
