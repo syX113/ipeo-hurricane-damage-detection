@@ -51,7 +51,7 @@ class Trainer:
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, T_max=cfg.epochs, eta_min=1e-6
         )
-        self.scaler = torch.cuda.amp.GradScaler(enabled=cfg.amp)
+        self.scaler = torch.amp.GradScaler(enabled=cfg.amp)
 
         self.best_metric = -float("inf")
         self.best_val_outputs: Optional[Dict] = None
@@ -104,7 +104,7 @@ class Trainer:
 
         for images, labels in iterable:
             self.optimizer.zero_grad()
-            with torch.cuda.amp.autocast(enabled=self.cfg.amp):
+            with torch.amp.autocast('cuda', enabled=self.cfg.amp):
                 logits = self.model(images)
                 loss = self.loss_fn(logits, labels)
             self.scaler.scale(loss).backward()
