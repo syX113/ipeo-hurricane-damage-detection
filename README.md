@@ -1,19 +1,35 @@
-# IPEO: Hurricane Damage Detection with Deep Learning
-Contains the code for the group project within the "Image Processing for Earth observation" 2025 course at EPFL.
+# IPEO: Hurricane Damage Detection
 
-### Installation and running the code
-
-1. Download the dataset from: [Hurricane Damage Image Dataset](https://filesender.switch.ch/filesender2/?s=download&token=2ff08eb6-9e5b-4be0-8c55-e7b93146c435) 
-2. Move the downloaded `train`, `validation` and `test` folders to `/data` in this folder strucutre.
-3. Run the following:
-
+## Data layout
 ```
-cd code
-python3 ....
-
+data/
+  train/damage
+  train/no_damage
+  validation/damage
+  validation/no_damage
+  test/damage
+  test/no_damage
 ```
 
-**Authors:**
-- Lorena Accossato
-- Noemi Montelaghi
-- Tim Giger
+## Quick start
+```python
+from hurricane import TrainConfig, Trainer
+
+cfg = TrainConfig(data_root="data", epochs=5, wandb_mode="disabled")
+trainer = Trainer(cfg)
+trainer.fit()
+print(trainer.test())
+```
+
+## Module overview
+- `hurricane.config`: `TrainConfig` and `build_config_from_dict` for easy overrides.
+- `hurricane.data`: ImageFolder datamodule + transforms.
+- `hurricane.models`: torchvision builders (swap via `model_name`: resnet18/34, efficientnet_b0, convnext_tiny).
+- `hurricane.training`: Trainer orchestrating train/val/test, checkpoints, optional temperature scaling.
+- `hurricane.validation`: metrics (accuracy/F1/Brier/ECE), evaluation loop, reliability bins, temperature scaler.
+- `hurricane.utils`: logging, reproducibility, checkpoint loader.
+
+## Calibration & tuning
+- Set `apply_temperature=True` to fit a temperature scaler on the best val logits.
+- Use `balance_strategy` (`weighted_sampler` or `class_weights`) to handle imbalance.
+- Compose W&B sweeps from the config fields (see `TrainConfig`).
