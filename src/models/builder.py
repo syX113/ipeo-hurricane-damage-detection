@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torchvision import models
 
-from hurricane.config import TrainConfig
+from config import TrainConfig
 
 
 def _get_weights(name: str, pretrained: bool):

@@ -3,9 +3,9 @@ from typing import Dict, Optional, Tuple
 import torch
 from torch.utils.data import DataLoader
 
-from hurricane.config import TrainConfig
-from hurricane.validation.calibration import TemperatureScaler
-from hurricane.validation.metrics import classification_metrics, expected_calibration_error
+from config import TrainConfig
+from validation.calibration import TemperatureScaler
+from validation.metrics import classification_metrics, expected_calibration_error
 
 
 @torch.no_grad()

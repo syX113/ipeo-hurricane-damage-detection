@@ -10,13 +10,13 @@ except ImportError:  # pragma: no cover - optional
 
 from tqdm.auto import tqdm
 
-from hurricane.config import TrainConfig
-from hurricane.data.datamodule import DataModule
-from hurricane.models.builder import build_model
-from hurricane.validation.evaluate import evaluate
-from hurricane.validation.calibration import TemperatureScaler
-from hurricane.utils.logging import get_logger, init_wandb
-from hurricane.utils.reproducibility import set_seed
+from config import TrainConfig
+from data.datamodule import DataModule
+from models.builder import build_model
+from validation.evaluate import evaluate
+from validation.calibration import TemperatureScaler
+from utils.logging import get_logger, init_wandb
+from utils.reproducibility import set_seed
 
 
 class Trainer:

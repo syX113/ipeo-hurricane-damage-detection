@@ -6,7 +6,7 @@ try:
 except ImportError:  # pragma: no cover
     wandb = None
 
-from hurricane.config import TrainConfig
+from config import TrainConfig
 
 
 def get_logger(name: str = "hurricane") -> logging.Logger:

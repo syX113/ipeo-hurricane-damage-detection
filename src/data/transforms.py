@@ -2,7 +2,7 @@ from typing import Dict, List
 
 from torchvision import transforms
 
-from hurricane.config import TrainConfig
+from config import TrainConfig
 
 
 def build_transforms(cfg: TrainConfig, train: bool = True) -> transforms.Compose:
