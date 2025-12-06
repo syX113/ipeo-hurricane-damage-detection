@@ -15,8 +15,12 @@ def _get_weights(name: str, pretrained: bool):
     return {
         "resnet18": models.ResNet18_Weights.DEFAULT,
         "resnet34": models.ResNet34_Weights.DEFAULT,
+        "resnet50": models.ResNet50_Weights.DEFAULT,
         "efficientnet_b0": models.EfficientNet_B0_Weights.DEFAULT,
+        "efficientnet_b1": models.EfficientNet_B1_Weights.DEFAULT,
+        "efficientnet_b2": models.EfficientNet_B2_Weights.DEFAULT,
         "convnext_tiny": models.ConvNeXt_Tiny_Weights.DEFAULT,
+        "convnext_small": models.ConvNeXt_Small_Weights.DEFAULT,
     }.get(name)
 
 
@@ -47,8 +51,12 @@ def build_model(cfg: TrainConfig) -> nn.Module:
     registry: Dict[str, Callable] = {
         "resnet18": partial(models.resnet18),
         "resnet34": partial(models.resnet34),
+        "resnet50": partial(models.resnet50),
         "efficientnet_b0": partial(models.efficientnet_b0),
+        "efficientnet_b1": partial(models.efficientnet_b1),
+        "efficientnet_b2": partial(models.efficientnet_b2),
         "convnext_tiny": partial(models.convnext_tiny),
+        "convnext_small": partial(models.convnext_small),
     }
     if cfg.model_name == "custom_cnn":
         model = CustomCNN(

@@ -26,11 +26,7 @@ class Trainer:
 
     def __init__(self, cfg: TrainConfig):
         self.cfg = cfg
-        # Allow notebook override via cfg.device_override (set dynamically).
-        if hasattr(cfg, "device_override") and cfg.device_override:
-            self.device = torch.device(cfg.device_override)
-        else:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         set_seed(cfg.seed)
         self.logger = get_logger()
         self.run = init_wandb(cfg)
