@@ -34,7 +34,7 @@ class TrainConfig:
     label_smoothing: float = 0.05
     amp: bool = True
     grad_clip_norm: Optional[float] = 1.0
-    early_stopping: int = 5
+    early_stopping: int = 10
     checkpoint_metric: str = "macro_f1"
     progress_bar: bool = True
 
