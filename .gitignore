@@ -1,3 +1,6 @@
+# Model checkpoints
+*.pt
+
 # Ignore dataset
 data/train/
 data/validation/
