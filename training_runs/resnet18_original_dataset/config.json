@@ -1,0 +1,58 @@
+{
+  "data_root": "../data",
+  "batch_size": 64,
+  "num_workers": 4,
+  "image_size": 256,
+  "mean": [
+    0.43,
+    0.411,
+    0.374
+  ],
+  "std": [
+    0.218,
+    0.207,
+    0.203
+  ],
+  "horizontal_flip": 0.5,
+  "max_rotation": 15.0,
+  "color_jitter": [
+    0.15,
+    0.15,
+    0.15,
+    0.05
+  ],
+  "balance_strategy": "weighted_sampler",
+  "model_name": "resnet18",
+  "pretrained": true,
+  "num_classes": 2,
+  "dropout": 0.1,
+  "in_channels": 3,
+  "freeze_backbone": false,
+  "optimizer": "adamw",
+  "lr": 0.0003,
+  "weight_decay": 0.0001,
+  "betas": [
+    0.9,
+    0.999
+  ],
+  "momentum": 0.9,
+  "epochs": 20,
+  "label_smoothing": 0.05,
+  "amp": true,
+  "grad_clip_norm": 1.0,
+  "early_stopping": 5,
+  "checkpoint_metric": "macro_f1",
+  "progress_bar": true,
+  "threshold": 0.5,
+  "reliability_bins": 15,
+  "apply_temperature": true,
+  "checkpoints_dir": "../training_runs/resnet18_original_dataset/artifacts/checkpoints",
+  "wandb_mode": "disabled",
+  "wandb_project": "hurricane-damage",
+  "wandb_entity": null,
+  "wandb_run_name": null,
+  "wandb_tags": [],
+  "tensorboard": false,
+  "tensorboard_dir": "../training_runs/resnet18_original_dataset/artifacts/tensorboard",
+  "seed": 42
+}

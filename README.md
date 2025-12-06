@@ -50,6 +50,21 @@ print(trainer.test())
 - `validation`: metrics (accuracy/F1/Brier/ECE), evaluation loop, reliability bins, temperature scaler.
 - `utils`: logging, reproducibility, checkpoint loader.
 
+## Key classes & interactions
+- `TrainConfig`: single source of truth for data, model, and optimization knobs; passed everywhere to keep runs reproducible.
+- `DataModule`: builds train/val/test `DataLoader`s with augmentations and optional class balancing; consumed by `Trainer`.
+- Model builders (`models.builder.build_model`): instantiate the chosen backbone and replace the classification head according to `cfg.num_classes`.
+- `Trainer`: drives epochs, logging, checkpointing, early stopping, and calls `evaluate` on val/test splits.
+- `TemperatureScaler` (`validation.calibration`): fits a scalar on validation logits to improve probability calibration; applied before test metrics and exported as `artifacts/checkpoints/temperature.pt` for reuse in inference.
+- `utils.checkpoint.load_checkpoint`: recreates a model + config from `artifacts/checkpoints/best.pt` for evaluation or inference.
+
+## Model training/approach
+1. Prepared Image folder data (`damage`, `no_damage`) into `train/`, `validation/`, `test/`.
+2. Choose a backbone via `cfg.model_name` (i.e.: `resnet18`, `resnet34`, `efficientnet_b0`, `convnext_tiny`) and set common hyperparameters (LR, weight decay, epochs, augmentations, balancing).
+3. Train with cross-entropy + label smoothing, mixed precision, weighted sampling or class weights, cosine LR decay, gradient clipping, and optional early stopping.
+4. Pick the best checkpoint by validation macro-F1, then fit a temperature scaler on the saved val logits to calibrate probabilities.
+5. Evaluate the calibrated model on the test split; compare metrics (macro-F1, accuracy, Brier, ECE, confusion matrices) across the four backbones to select the best trade-off.
+
 ## Calibration & tuning
 - Set `apply_temperature=True` to fit a temperature scaler on the best val logits.
 - Use `balance_strategy` (`weighted_sampler` or `class_weights`) to handle class imbalance.

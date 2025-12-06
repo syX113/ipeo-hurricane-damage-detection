@@ -1,7 +1,12 @@
 # Ignore dataset
 data/train/
-data/test/
 data/validation/
+data/test/
+
+# Ignore resampled dataset
+data_resampled/train/
+data_resampled/validation/
+data_resampled/test/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -6,6 +6,7 @@ import torch.nn as nn
 from torchvision import models
 
 from config import TrainConfig
+from .custom import CustomCNN
 
 
 def _get_weights(name: str, pretrained: bool):
@@ -49,6 +50,16 @@ def build_model(cfg: TrainConfig) -> nn.Module:
         "efficientnet_b0": partial(models.efficientnet_b0),
         "convnext_tiny": partial(models.convnext_tiny),
     }
+    if cfg.model_name == "custom_cnn":
+        model = CustomCNN(
+            in_channels=cfg.in_channels,
+            num_classes=cfg.num_classes,
+            dropout=cfg.dropout,
+        )
+        if cfg.freeze_backbone and hasattr(model, "features"):
+            for name, param in model.features.named_parameters():  # type: ignore[attr-defined]
+                param.requires_grad = False
+        return model
     if cfg.model_name not in registry:
         raise ValueError(f"Model {cfg.model_name} not supported")
 
