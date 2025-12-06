@@ -104,7 +104,10 @@ class Trainer:
 
         for images, labels in iterable:
             self.optimizer.zero_grad()
-            with torch.amp.autocast('cuda', enabled=self.cfg.amp):
+            with torch.amp.autocast(
+                device_type=self.device.type,
+                enabled=self.cfg.amp and self.device.type == "cuda",
+            ):
                 logits = self.model(images)
                 loss = self.loss_fn(logits, labels)
             self.scaler.scale(loss).backward()

@@ -55,6 +55,7 @@ class TrainConfig:
 
     # Misc
     seed: int = 42
+    data_integrity_check: bool = False  # optional coordinate/leakage summary during setup
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
