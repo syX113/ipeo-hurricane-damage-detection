@@ -16,8 +16,7 @@ What it does:
 * Groups files by coordinate key derived from the filename stem (lon_lat).
 * Assigns each coordinate group to a single split, aiming to preserve the
   original split sizes as much as possible.
-* Writes a new folder tree (output_root/{split}/{class}) using hardlinks by
-  default (or copies if --copy is set) so the original data remains untouched.
+* Writes a new folder tree (output_root/{split}/{class}) using copies so the original data remains untouched.
 
 Usage examples:
     python src/utils/build_coordinate_split.py --data-root data --output-root data_resampled --dry-run
@@ -80,22 +79,23 @@ def parse_args() -> argparse.Namespace:
 
 def coord_key_from_path(path: Path, coord_round: int) -> Tuple[CoordKey, Tuple[float, float] | None]:
     """
-    Extract the coordinate key from a filename.
+    Extract the coordinate key from a filename (robust to prefixes).
     Parse lon/lat and round to reduce float-noise variants mapping to different keys.
     Returns the key and the raw lon/lat if parsing succeeds.
     """
+    import re
+
     stem = path.stem
-    try:
-        lon_str, lat_str = stem.split("_", 1)
-        lon = round(float(lon_str), 6)
-        lat = round(float(lat_str), 6)
-        lon_key = round(lon, coord_round)
-        lat_key = round(lat, coord_round)
-        key = f"{lon_key:.{coord_round}f}_{lat_key:.{coord_round}f}"
-        return key, (lon, lat)
-    except Exception:
+    match = re.search(r"(-?\\d+(?:\\.\\d+)?)_(-?\\d+(?:\\.\\d+)?)", stem)
+    if not match:
         # Fallback: keep original stem so we do not drop the sample if parsing fails.
         return stem, None
+    lon = round(float(match.group(1)), 6)
+    lat = round(float(match.group(2)), 6)
+    lon_key = round(lon, coord_round)
+    lat_key = round(lat, coord_round)
+    key = f"{lon_key:.{coord_round}f}_{lat_key:.{coord_round}f}"
+    return key, (lon, lat)
 
 
 def collect_groups(data_root: Path, exts: Iterable[str], coord_round: int) -> Tuple[
@@ -309,9 +309,8 @@ def materialize(
     output_root: Path,
 ) -> Counter:
     """
-    Write the grouped dataset to disk using copies (no hardlinks to avoid surprises).
-    Destination filenames are rewritten to the normalized coord key to make the
-    renaming explicit and avoid keeping noisy float precision in stems.
+    Write the grouped dataset to disk using copies.
+    Destination filenames include coord key and original stem to preserve metadata.
     """
     counts = Counter()
     per_coord_counter: Dict[Tuple[str, str, str], int] = {}
@@ -324,14 +323,14 @@ def materialize(
             idx = per_coord_counter.get(key, 0)
             per_coord_counter[key] = idx + 1
             suffix = src.suffix
-            # First file for a coord uses bare coord; subsequent get an index suffix.
-            dest_name = f"{coord}{suffix}" if idx == 0 else f"{coord}_{idx:04d}{suffix}"
+            base = f"{coord}__{src.stem}"
+            dest_name = f"{base}{suffix}" if idx == 0 else f"{base}_{idx:04d}{suffix}"
             dest_path = dest_dir / dest_name
             # Ensure uniqueness in case of unexpected collisions.
             while dest_path.exists():
                 idx += 1
                 per_coord_counter[key] = idx + 1
-                dest_name = f"{coord}_{idx:04d}{suffix}"
+                dest_name = f"{base}_{idx:04d}{suffix}"
                 dest_path = dest_dir / dest_name
             shutil.copy2(src, dest_path)
             counts[split] += 1
