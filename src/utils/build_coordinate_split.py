@@ -17,13 +17,11 @@ What it does:
 * Writes a new folder tree (output_root/{split}/{class}) using hardlinks by
   default (or copies if --copy is set) so the original data remains untouched.
 
-
 Usage examples:
-    python src/utils/build_coordinate_split.py --data-root data --output-root data_grouped --dry-run
-    python src/utils/build_coordinate_split.py --data-root data --output-root data_grouped
+    python src/utils/build_coordinate_split.py --data-root data --output-root data_resampled --dry-run
+    python src/utils/build_coordinate_split.py --data-root data --output-root data_resampled
 
-After running, point the datamodule to the new root to train/evaluate without
-cross-split leakage.
+After running, point the datamodule to the new root to train/evaluate without cross-split leakage.
 """
 
 from __future__ import annotations
@@ -32,7 +30,7 @@ import argparse
 import os
 import random
 import shutil
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
@@ -58,7 +56,6 @@ def parse_args() -> argparse.Namespace:
         help="Image extensions to include.",
     )
     parser.add_argument("--seed", type=int, default=42, help="Deterministic seed for group assignment.")
-    parser.add_argument("--copy", action="store_true", help="Copy files instead of hardlinking them.")
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -70,10 +67,17 @@ def parse_args() -> argparse.Namespace:
 def coord_key_from_path(path: Path) -> CoordKey:
     """
     Extract the coordinate key from a filename.
-    We keep the full stem (e.g., '-95.269851_29.604840000000003') so all variants
-    of the same location collapse into one group.
+    Parse lon/lat and round to reduce float-noise variants mapping to different keys.
     """
-    return path.stem
+    stem = path.stem
+    try:
+        lon_str, lat_str = stem.split("_", 1)
+        lon = round(float(lon_str), 6)
+        lat = round(float(lat_str), 6)
+        return f"{lon:.6f}_{lat:.6f}"
+    except Exception:
+        # Fallback: keep original stem so we do not drop the sample if parsing fails.
+        return stem
 
 
 def collect_groups(data_root: Path, exts: Iterable[str]) -> Tuple[
@@ -190,32 +194,44 @@ def materialize(
     groups: Dict[CoordKey, Dict],
     assignments: Dict[CoordKey, SplitName],
     output_root: Path,
-    copy_files: bool,
 ) -> Counter:
     """
-    Write the grouped dataset to disk using hardlinks (default) or copies.
+    Write the grouped dataset to disk using copies (no hardlinks to avoid surprises).
+    Destination filenames are rewritten to the normalized coord key to make the
+    renaming explicit and avoid keeping noisy float precision in stems.
     """
     counts = Counter()
+    per_coord_counter: Dict[Tuple[str, str, str], int] = {}
     for coord, info in groups.items():
         split = assignments[coord]
         for src, label, _orig_split in info["items"]:
             dest_dir = output_root / split / label
             ensure_dir(dest_dir)
-            dest_path = unique_destination(dest_dir, src.name)
-            if copy_files:
-                shutil.copy2(src, dest_path)
-            else:
-                try:
-                    os.link(src, dest_path)
-                except OSError:
-                    # Fallback to copy if hardlink is not possible (e.g., different device).
-                    shutil.copy2(src, dest_path)
+            key = (split, coord, label)
+            idx = per_coord_counter.get(key, 0)
+            per_coord_counter[key] = idx + 1
+            suffix = src.suffix
+            # First file for a coord uses bare coord; subsequent get an index suffix.
+            dest_name = f"{coord}{suffix}" if idx == 0 else f"{coord}_{idx:04d}{suffix}"
+            dest_path = dest_dir / dest_name
+            # Ensure uniqueness in case of unexpected collisions.
+            while dest_path.exists():
+                idx += 1
+                per_coord_counter[key] = idx + 1
+                dest_name = f"{coord}_{idx:04d}{suffix}"
+                dest_path = dest_dir / dest_name
+            shutil.copy2(src, dest_path)
             counts[split] += 1
     return counts
 
 
 def main() -> None:
     args = parse_args()
+
+    # Best-practice steps:
+    # 1) Scan original data_root split/class folders and group by normalized coordinate keys.
+    # 2) Assign every coordinate group to exactly one split (no cross-split sharing).
+    # 3) Copy files (no hardlinks) into a clean output_root/{split}/{class} tree.
 
     groups, split_counts, class_counts, split_names, label_names, conflict_coords, multisplit_coords = collect_groups(args.data_root, args.exts)
 
@@ -234,8 +250,11 @@ def main() -> None:
         print("Dry run requested; not writing any files.")
         return
 
+    # Clean output_root before writing to avoid mixing old/new assignments (prevents leakage via leftovers).
+    if args.output_root.exists():
+        shutil.rmtree(args.output_root)
     ensure_dir(args.output_root)
-    realized = materialize(groups, assignments, args.output_root, copy_files=args.copy)
+    realized = materialize(groups, assignments, args.output_root)
     print(f"Wrote grouped dataset to: {args.output_root}")
     print(f"Final split sizes: {dict(realized)}")
     print("Tip: point TrainConfig.data_root to this new directory to train without leakage.")
