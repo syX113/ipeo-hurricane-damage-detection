@@ -7,7 +7,9 @@ filename) can appear in train, validation, and test simultaneously, sometimes
 with conflicting labels. This leaks information between splits and causes the
 validation curves to swing depending on whether the model is seeing an already
 memorized building. Grouping every coordinate into exactly one split fixes that
-leakage while keeping the before/after pairs intact inside the split.
+leakage while keeping the before/after pairs intact inside the split. The script
+also merges coordinates that are very close together (configurable distance and
+decimal rounding) so near-duplicate tiles do not straddle splits.
 
 What it does:
 * Scans data_root/{train,validation,test}/{class} for image files.
@@ -55,6 +57,18 @@ def parse_args() -> argparse.Namespace:
         default=[".jpeg", ".jpg", ".png"],
         help="Image extensions to include.",
     )
+    parser.add_argument(
+        "--coord-round",
+        type=int,
+        default=3,
+        help="Decimal places to round lon/lat when deriving coordinate keys (coarser keeps nearby images together).",
+    )
+    parser.add_argument(
+        "--merge-distance-m",
+        type=float,
+        default=150.0,
+        help="Merge coordinate groups whose centers are within this many meters (0 to disable).",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Deterministic seed for group assignment.")
     parser.add_argument(
         "--dry-run",
@@ -64,23 +78,27 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def coord_key_from_path(path: Path) -> CoordKey:
+def coord_key_from_path(path: Path, coord_round: int) -> Tuple[CoordKey, Tuple[float, float] | None]:
     """
     Extract the coordinate key from a filename.
     Parse lon/lat and round to reduce float-noise variants mapping to different keys.
+    Returns the key and the raw lon/lat if parsing succeeds.
     """
     stem = path.stem
     try:
         lon_str, lat_str = stem.split("_", 1)
         lon = round(float(lon_str), 6)
         lat = round(float(lat_str), 6)
-        return f"{lon:.6f}_{lat:.6f}"
+        lon_key = round(lon, coord_round)
+        lat_key = round(lat, coord_round)
+        key = f"{lon_key:.{coord_round}f}_{lat_key:.{coord_round}f}"
+        return key, (lon, lat)
     except Exception:
         # Fallback: keep original stem so we do not drop the sample if parsing fails.
-        return stem
+        return stem, None
 
 
-def collect_groups(data_root: Path, exts: Iterable[str]) -> Tuple[
+def collect_groups(data_root: Path, exts: Iterable[str], coord_round: int) -> Tuple[
     Dict[CoordKey, Dict],
     Counter,
     Counter,
@@ -88,6 +106,7 @@ def collect_groups(data_root: Path, exts: Iterable[str]) -> Tuple[
     List[LabelName],
     int,
     int,
+    Dict[CoordKey, Tuple[float, float] | None],
 ]:
     groups: Dict[CoordKey, Dict] = {}
     split_counts: Counter = Counter()
@@ -96,6 +115,7 @@ def collect_groups(data_root: Path, exts: Iterable[str]) -> Tuple[
     label_names: List[LabelName] = []
     conflict_coords = 0
     multisplit_coords = 0
+    coord_lookup: Dict[CoordKey, Tuple[float, float] | None] = {}
 
     exts_lower = {e.lower() for e in exts}
 
@@ -109,8 +129,12 @@ def collect_groups(data_root: Path, exts: Iterable[str]) -> Tuple[
             for img_path in label_dir.iterdir():
                 if img_path.suffix.lower() not in exts_lower:
                     continue
-                key = coord_key_from_path(img_path)
-                info = groups.setdefault(key, {"items": [], "labels": set(), "splits": set()})
+                key, lonlat = coord_key_from_path(img_path, coord_round)
+                info = groups.setdefault(key, {"items": [], "labels": set(), "splits": set(), "coord": None})
+                if lonlat is not None:
+                    coord_lookup.setdefault(key, lonlat)
+                    if info["coord"] is None:
+                        info["coord"] = lonlat
                 info["items"].append((img_path, label, split))
                 info["labels"].add(label)
                 info["splits"].add(split)
@@ -125,7 +149,18 @@ def collect_groups(data_root: Path, exts: Iterable[str]) -> Tuple[
 
     split_names.sort()
     label_names.sort()
-    return groups, split_counts, class_counts, split_names, label_names, conflict_coords, multisplit_coords
+    return groups, split_counts, class_counts, split_names, label_names, conflict_coords, multisplit_coords, coord_lookup
+
+
+def summarize_groups(groups: Dict[CoordKey, Dict]) -> Tuple[int, int]:
+    conflict_coords = 0
+    multisplit_coords = 0
+    for info in groups.values():
+        if len(info["labels"]) > 1:
+            conflict_coords += 1
+        if len(info["splits"]) > 1:
+            multisplit_coords += 1
+    return conflict_coords, multisplit_coords
 
 
 def compute_targets(split_counts: Counter) -> Dict[SplitName, int]:
@@ -134,6 +169,84 @@ def compute_targets(split_counts: Counter) -> Dict[SplitName, int]:
     If a split was empty, it will not receive any groups.
     """
     return {split: count for split, count in split_counts.items() if count > 0}
+
+
+def merge_close_groups(groups: Dict[CoordKey, Dict], coord_lookup: Dict[CoordKey, Tuple[float, float]], threshold_m: float) -> Dict[CoordKey, Dict]:
+    """
+    Merge coordinate groups whose centers fall within threshold_m meters.
+    This is conservative against leakage from nearby (not just identical) coordinates.
+    """
+    if threshold_m <= 0 or not coord_lookup:
+        return groups
+
+    import math
+    from collections import defaultdict
+
+    def haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+        # Standard haversine distance in meters.
+        R = 6_371_000.0
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = phi2 - phi1
+        dlambda = math.radians(lon2 - lon1)
+        a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+        return 2 * R * math.asin(math.sqrt(a))
+
+    # Roughly convert meters to degrees (lat-based; lon will be tighter at higher latitudes).
+    cell_size = threshold_m / 111_320.0
+    grid: Dict[Tuple[int, int], List[CoordKey]] = defaultdict(list)
+    for key, (lon, lat) in coord_lookup.items():
+        cell = (int(lon // cell_size), int(lat // cell_size))
+        grid[cell].append(key)
+
+    parent: Dict[CoordKey, CoordKey] = {k: k for k in groups.keys()}
+
+    def find(x: CoordKey) -> CoordKey:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: CoordKey, b: CoordKey) -> None:
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return
+        # Keep the larger group as root to reduce tree depth.
+        if len(groups[ra]["items"]) < len(groups[rb]["items"]):
+            ra, rb = rb, ra
+        parent[rb] = ra
+
+    neighbors = [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+    for cell, keys in grid.items():
+        for key in keys:
+            lon1, lat1 = coord_lookup[key]
+            for dx, dy in neighbors:
+                nk_cell = (cell[0] + dx, cell[1] + dy)
+                for other in grid.get(nk_cell, []):
+                    if key >= other:
+                        # Enforce an ordering to avoid duplicate checks.
+                        continue
+                    lon2, lat2 = coord_lookup[other]
+                    if haversine_m(lon1, lat1, lon2, lat2) <= threshold_m:
+                        union(key, other)
+
+    merged: Dict[CoordKey, Dict] = {}
+    for key, info in groups.items():
+        root = find(key)
+        out = merged.setdefault(
+            root,
+            {
+                "items": [],
+                "labels": set(),
+                "splits": set(),
+                "coord": groups[root].get("coord") or coord_lookup.get(root),
+            },
+        )
+        out["items"].extend(info["items"])
+        out["labels"].update(info["labels"])
+        out["splits"].update(info["splits"])
+        if out["coord"] is None and info.get("coord") is not None:
+            out["coord"] = info["coord"]
+    return merged
 
 
 def assign_groups(groups: Dict[CoordKey, Dict], targets: Dict[SplitName, int], seed: int) -> Tuple[Dict[CoordKey, SplitName], Counter]:
@@ -228,18 +341,21 @@ def materialize(
 def main() -> None:
     args = parse_args()
 
-    # Best-practice steps:
-    # 1) Scan original data_root split/class folders and group by normalized coordinate keys.
-    # 2) Assign every coordinate group to exactly one split (no cross-split sharing).
-    # 3) Copy files (no hardlinks) into a clean output_root/{split}/{class} tree.
+    groups, split_counts, class_counts, split_names, label_names, conflict_coords, multisplit_coords, coord_lookup = collect_groups(args.data_root, args.exts, args.coord_round)
 
-    groups, split_counts, class_counts, split_names, label_names, conflict_coords, multisplit_coords = collect_groups(args.data_root, args.exts)
-
-    print(f"Found {len(groups)} unique coordinates across splits.")
+    print(f"Found {len(groups)} unique coordinates across splits (rounded to {args.coord_round} decimals).")
     print(f"Class counts: {dict(class_counts)}")
     print(f"Original split sizes: {dict(split_counts)}")
     print(f"Coords with conflicting labels: {conflict_coords}")
     print(f"Coords appearing in multiple splits: {multisplit_coords}")
+
+    if args.merge_distance_m > 0:
+        groups = merge_close_groups(groups, {k: v for k, v in coord_lookup.items() if v is not None}, args.merge_distance_m)
+        conflict_coords, multisplit_coords = summarize_groups(groups)
+        print(
+            f"After merging coords within {args.merge_distance_m} meters: {len(groups)} unique coordinates; "
+            f"conflicting-label coords={conflict_coords}, multisplit coords={multisplit_coords}"
+        )
 
     targets = compute_targets(split_counts)
     assignments, filled_counts = assign_groups(groups, targets, args.seed)

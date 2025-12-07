@@ -20,8 +20,7 @@ class ConvBlock(nn.Module):
 
 class CustomCNN(nn.Module):
     """
-    Lightweight CNN baseline that fits the training/evaluation pipeline.
-    Uses four downsampling blocks followed by global pooling + MLP head.
+    Lightweight CNN baseline which uses 4 downsampling blocks followed by global pooling + MLP head.
     """
 
     def __init__(self, in_channels: int = 3, num_classes: int = 2, dropout: float = 0.3):

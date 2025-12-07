@@ -11,6 +11,13 @@ data_resampled/train/
 data_resampled/validation/
 data_resampled/test/
 
+
+# Ignore resampled dataset
+data_clean/train/
+data_clean/validation/
+data_clean/test/
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -20,7 +27,7 @@ __pycache__/
 *.so
 
 # VS Code stuff
-.vscode/
+#.vscode/
 
 # Distribution / packaging
 .Python
