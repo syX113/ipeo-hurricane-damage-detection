@@ -44,6 +44,7 @@ class DataModule:
         return WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
 
     def _loader(self, dataset: ImageFolder, sampler=None, shuffle=False) -> DataLoader:
+        persistent = self.cfg.num_workers > 0
         return DataLoader(
             dataset,
             batch_size=self.cfg.batch_size,
@@ -52,7 +53,7 @@ class DataModule:
             num_workers=self.cfg.num_workers,
             pin_memory=True,
             drop_last=shuffle,
-            persistent_workers=True,
+            persistent_workers=persistent,
         )
 
     def train_dataloader(self) -> DataLoader:
