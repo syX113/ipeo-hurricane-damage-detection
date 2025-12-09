@@ -28,7 +28,7 @@ def _adapt_first_conv(module: nn.Module, in_channels: int) -> None:
     """Expand/shrink first conv to support non-RGB inputs without reinitializing everything."""
     if not hasattr(module, "conv1"):
         return
-    conv1 = module.conv1  # type: ignore[attr-defined]
+    conv1 = module.conv1
     if conv1.in_channels == in_channels:
         return
     new_conv = nn.Conv2d(
@@ -44,7 +44,7 @@ def _adapt_first_conv(module: nn.Module, in_channels: int) -> None:
         if in_channels > conv1.in_channels:
             extra = in_channels - conv1.in_channels
             new_conv.weight[:, conv1.in_channels :, :, :] = conv1.weight[:, :extra, :, :]
-    module.conv1 = new_conv  # type: ignore[attr-defined]
+    module.conv1 = new_conv
 
 
 def build_model(cfg: TrainConfig) -> nn.Module:
@@ -65,7 +65,7 @@ def build_model(cfg: TrainConfig) -> nn.Module:
             dropout=cfg.dropout,
         )
         if cfg.freeze_backbone and hasattr(model, "features"):
-            for name, param in model.features.named_parameters():  # type: ignore[attr-defined]
+            for name, param in model.features.named_parameters():
                 param.requires_grad = False
         return model
     if cfg.model_name not in registry:
@@ -75,21 +75,21 @@ def build_model(cfg: TrainConfig) -> nn.Module:
     model = registry[cfg.model_name](weights=weights)
 
     if hasattr(model, "fc"):
-        in_features = model.fc.in_features  # type: ignore[attr-defined]
+        in_features = model.fc.in_features
         head = []
         if cfg.dropout:
             head.append(nn.Dropout(cfg.dropout))
         head.append(nn.Linear(in_features, cfg.num_classes))
-        model.fc = nn.Sequential(*head) if len(head) > 1 else head[0]  # type: ignore[attr-defined]
+        model.fc = nn.Sequential(*head) if len(head) > 1 else head[0]
     elif hasattr(model, "classifier"):
-        classifier = model.classifier  # type: ignore[attr-defined]
+        classifier = model.classifier
         if isinstance(classifier, nn.Sequential):
             in_features = classifier[-1].in_features  # type: ignore[index]
             classifier[-1] = nn.Linear(in_features, cfg.num_classes)  # type: ignore[index]
-            model.classifier = classifier  # type: ignore[attr-defined]
+            model.classifier = classifier
         else:
-            in_features = classifier.in_features  # type: ignore[attr-defined]
-            model.classifier = nn.Linear(in_features, cfg.num_classes)  # type: ignore[attr-defined]
+            in_features = classifier.in_features
+            model.classifier = nn.Linear(in_features, cfg.num_classes)
     else:
         raise RuntimeError("Unhandled head for selected model.")
 

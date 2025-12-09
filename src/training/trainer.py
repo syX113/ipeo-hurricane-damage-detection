@@ -2,10 +2,12 @@ import torch
 import torch.nn.functional as F
 from pathlib import Path
 from typing import Dict, Optional
+import random
+import numpy as np
 
 try:
     from torch.utils.tensorboard import SummaryWriter
-except ImportError:  # pragma: no cover - optional
+except ImportError:
     SummaryWriter = None
 
 from tqdm.auto import tqdm
@@ -16,7 +18,6 @@ from models.builder import build_model
 from validation.evaluate import evaluate
 from validation.calibration import TemperatureScaler
 from utils.logging import get_logger, init_wandb
-from utils.reproducibility import set_seed
 
 
 class Trainer:
@@ -24,10 +25,18 @@ class Trainer:
     Train → validate → optional temperature scaling → test.
     """
 
+    def set_seed(seed: int) -> None:
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
     def __init__(self, cfg: TrainConfig):
         self.cfg = cfg
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        set_seed(cfg.seed)
+        self.set_seed(cfg.seed)
         self.logger = get_logger()
         self.run = init_wandb(cfg)
 
@@ -39,14 +48,11 @@ class Trainer:
 
         self.model = build_model(cfg).to(self.device)
         class_weights = self._build_class_weights()
-        self.loss_fn = lambda logits, targets: F.cross_entropy(
-            logits, targets, weight=class_weights, label_smoothing=cfg.label_smoothing
-        )
-        # Cosine schedule by default for smooth decay; change here if you need other policies.
+        self.loss_fn = lambda logits, targets: F.cross_entropy(logits, targets, weight=class_weights, label_smoothing=cfg.label_smoothing)
+
+        # Cosine schedule by default for decay
         self.optimizer = self._build_optimizer()
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=cfg.epochs, eta_min=1e-6
-        )
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=cfg.epochs, eta_min=1e-6)
         self.scaler = torch.amp.GradScaler(enabled=cfg.amp)
 
         self.best_metric = -float("inf")
@@ -63,7 +69,7 @@ class Trainer:
         if self.cfg.balance_strategy != "class_weights":
             return None
         counts = {}
-        for label in self.train_loader.dataset.targets:  # type: ignore[attr-defined]
+        for label in self.train_loader.dataset.targets:
             counts[label] = counts.get(label, 0) + 1
         total = sum(counts.values())
         weights = [total / counts[c] for c in sorted(counts)]
@@ -124,9 +130,7 @@ class Trainer:
 
         for epoch in range(self.cfg.epochs):
             train_loss = self.train_epoch(epoch)
-            val_metrics, val_outputs = evaluate(
-                self.model, self.val_loader, self.device, self.cfg, temperature=None
-            )
+            val_metrics, val_outputs = evaluate(self.model, self.val_loader, self.device, self.cfg, temperature=None)
             val_loss = self.loss_fn(val_outputs["logits"], val_outputs["labels"]).item()
 
             payload = {
@@ -138,9 +142,7 @@ class Trainer:
             }
             if self.run:
                 self.run.log(payload)
-            self.logger.info(
-                f"Epoch {epoch:03d} | train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | val_f1={val_metrics['macro_f1']:.3f}"
-            )
+            self.logger.info(f"Epoch {epoch:03d} | train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | val_f1={val_metrics['macro_f1']:.3f}")
 
             if self.tb_writer:
                 self.tb_writer.add_scalar("loss/train", train_loss, epoch)
