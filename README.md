@@ -26,22 +26,22 @@ Point `TrainConfig.data_root` to the chosen cleaned directory.
 
 ```mermaid
 graph TD
-  A["Raw data in data/{train,validation,test}/damage,no_damage"] --> B[Split inspection\nnotebooks/00_split_inspection.ipynb]
-  B --> C[EDA\nnotebooks/00_exploratory_analysis.ipynb]
+  A["Raw data in data/{train,validation,test}/damage,no_damage"] --> B["Split inspection\nnotebooks/00_split_inspection.ipynb"]
+  B --> C["EDA\nnotebooks/00_exploratory_analysis.ipynb"]
   C --> D{Build cleaned splits}
-  D --> D1[data_resampled\nbuild_coordinate_split.py\n(no cross-split coord leakage)]
-  D --> D2[data_clean\nbuild_clean_dataset.py\n(dedup, optional drop conflicts,\noptional downsample majority)]
-  D1 --> E[TrainConfig\nsrc/config.py]
+  D --> D1["data_resampled\nbuild_coordinate_split.py\n(no cross-split coord leakage)"]
+  D --> D2["data_clean\nbuild_clean_dataset.py\n(dedup, optional drop conflicts,\noptional downsample majority)"]
+  D1 --> E["TrainConfig\nsrc/config.py"]
   D2 --> E
-  E --> F[DataModule\ntransforms + sampler\nsrc/data]
-  F --> G[Model builder\nreplace classifier head\n_adapt_first_conv for non-RGB\noptional freeze backbone\nsrc/models]
-  G --> H[Trainer.fit\nCE+label smoothing (+class weights)\nAdamW/SGD + cosine LR\nAMP + grad clip + early stop\nsave best.pt\nsrc/training]
-  H --> I[Val metrics per epoch]
-  H --> J[best.pt checkpoint]
-  J --> K[Temperature scaling on val logits\nLBFGS scalar T\nsrc/validation/calibration.py]
-  K --> L[Eval raw + calibrated\nnotebooks/02_evaluate.ipynb]
-  L --> M[Metrics: accuracy, macro P/R/F1,\nBrier, ECE; plots (confusion,\nscore hist, reliability)]
-  M --> N[Compare runs\nnotebooks/03_comparison.ipynb]
+  E --> F["DataModule\ntransforms + sampler\nsrc/data"]
+  F --> G["Model builder\nreplace classifier head\n_adapt_first_conv for non-RGB\noptional freeze backbone\nsrc/models"]
+  G --> H["Trainer.fit\nCE+label smoothing (+class weights)\nAdamW/SGD + cosine LR\nAMP + grad clip + early stop\nsave best.pt\nsrc/training"]
+  H --> I["Val metrics per epoch"]
+  H --> J["best.pt checkpoint"]
+  J --> K["Temperature scaling on val logits\nLBFGS scalar T\nsrc/validation/calibration.py"]
+  K --> L["Eval raw + calibrated\nnotebooks/02_evaluate.ipynb"]
+  L --> M["Metrics: accuracy, macro P/R/F1,\nBrier, ECE; plots (confusion,\nscore hist, reliability)"]
+  M --> N["Compare runs\nnotebooks/03_comparison.ipynb"]
 ```
 
 ## Quick start (code)
