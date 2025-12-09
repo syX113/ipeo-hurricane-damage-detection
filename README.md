@@ -26,7 +26,7 @@ Point `TrainConfig.data_root` to the chosen cleaned directory.
 
 ```mermaid
 graph TD
-  A[Raw data in data/{train, validation, test}/{damage, no_damage}] --> B[Split inspection\nnotebooks/00_split_inspection.ipynb]
+  A["Raw data in data/{train,validation,test}/damage,no_damage"] --> B[Split inspection\nnotebooks/00_split_inspection.ipynb]
   B --> C[EDA\nnotebooks/00_exploratory_analysis.ipynb]
   C --> D{Build cleaned splits}
   D --> D1[data_resampled\nbuild_coordinate_split.py\n(no cross-split coord leakage)]
