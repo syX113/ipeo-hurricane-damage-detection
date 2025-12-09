@@ -101,7 +101,7 @@ class DataModule:
             labels_for_coord = {}
             counts_for_coord = {}
             class_counter = Counter()
-            for path, cls_idx in ds.samples:  # type: ignore[attr-defined]
+            for path, cls_idx in ds.samples:
                 key = coord_key(Path(path))
                 lbl = ds.classes[cls_idx]
                 labels_for_coord.setdefault(key, set()).add(lbl)
@@ -133,8 +133,5 @@ class DataModule:
             f"overlap train∩val={overlap_train_val}, train∩test={overlap_train_test}, val∩test={overlap_val_test}"
         )
         logger.info(
-            "Split class counts: "
-            f"train={dict(class_counts.get('train', {}))}, "
-            f"val={dict(class_counts.get('validation', {}))}, "
-            f"test={dict(class_counts.get('test', {}))}"
+            "Split class counts: " f"train={dict(class_counts.get('train', {}))}, " f"val={dict(class_counts.get('validation', {}))}, " f"test={dict(class_counts.get('test', {}))}"
         )

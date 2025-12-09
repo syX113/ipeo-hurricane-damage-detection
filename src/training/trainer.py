@@ -25,6 +25,7 @@ class Trainer:
     Train → validate → optional temperature scaling → test.
     """
 
+    @staticmethod
     def set_seed(seed: int) -> None:
         random.seed(seed)
         np.random.seed(seed)

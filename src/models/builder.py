@@ -1,12 +1,12 @@
 from functools import partial
 from typing import Callable, Dict
 
-import torch
 import torch.nn as nn
 from torchvision import models
 
 from config import TrainConfig
 from .custom import CustomCNN
+from .custom_time_detector import CustomTimeDetector
 
 
 def _get_weights(name: str, pretrained: bool):
@@ -63,6 +63,19 @@ def build_model(cfg: TrainConfig) -> nn.Module:
             in_channels=cfg.in_channels,
             num_classes=cfg.num_classes,
             dropout=cfg.dropout,
+        )
+        if cfg.freeze_backbone and hasattr(model, "features"):
+            for name, param in model.features.named_parameters():
+                param.requires_grad = False
+        return model
+    if cfg.model_name == "custom_time_detector":
+        model = CustomTimeDetector(
+            in_channels=cfg.in_channels,
+            num_classes=cfg.num_classes,
+            dropout=cfg.dropout,
+            shuffle_pixels=cfg.custom_shuffle_pixels,
+            pointwise_conv=cfg.custom_pointwise_conv,
+            shuffle_seed=cfg.seed,
         )
         if cfg.freeze_backbone and hasattr(model, "features"):
             for name, param in model.features.named_parameters():

@@ -23,6 +23,9 @@ class TrainConfig:
     dropout: float = 0.1
     in_channels: int = 3
     freeze_backbone: bool = False
+    # Custom model options
+    custom_shuffle_pixels: bool = False  # when using custom_time_detector
+    custom_pointwise_conv: bool = False  # swap 3x3 for 1x1 conv to destroy spatial cues
 
     # Optimization
     optimizer: str = "adamw"  # adamw or sgd
