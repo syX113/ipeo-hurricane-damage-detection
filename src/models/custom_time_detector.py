@@ -38,6 +38,7 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, p_drop: float = 0.0, kernel_size: int = 3):
         super().__init__()
         padding = kernel_size // 2
+        # Swap 3x3 kernels for 1x1 when destroying spatial cues
         layers = [
             nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, padding=padding, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -77,6 +78,7 @@ class CustomTimeDetector(nn.Module):
             ConvBlock(64, 128, p_drop=0.05, kernel_size=k),
             ConvBlock(128, 256, p_drop=0.05, kernel_size=k),
         )
+        # Global pooling before classifier to capture CAM activations
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         head = [nn.Flatten(), nn.Linear(256, 128), nn.ReLU(inplace=True)]
         if dropout:

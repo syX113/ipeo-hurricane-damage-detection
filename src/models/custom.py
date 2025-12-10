@@ -4,6 +4,7 @@ import torch.nn as nn
 class ConvBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, p_drop: float = 0.0):
         super().__init__()
+        # Simple conv → BN → ReLU → pooling block with optional dropout
         layers = [
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -31,6 +32,7 @@ class CustomCNN(nn.Module):
             ConvBlock(64, 128, p_drop=0.05),
             ConvBlock(128, 256, p_drop=0.05),
         )
+        # Collapse spatial dimension before the linear head
         self.pool = nn.AdaptiveAvgPool2d((1, 1))
         head = [
             nn.Flatten(),

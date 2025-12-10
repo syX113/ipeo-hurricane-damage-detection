@@ -8,15 +8,22 @@ from sklearn.metrics import accuracy_score, brier_score_loss, precision_recall_f
 def classification_metrics(logits: torch.Tensor, labels: torch.Tensor) -> Dict[str, float]:
     probs = torch.softmax(logits, dim=1)
     preds = torch.argmax(probs, dim=1)
+    probs_cpu = probs.detach().cpu().numpy()
     y_true = labels.detach().cpu().numpy()
     y_pred = preds.cpu().numpy()
-    y_prob = probs[:, 1].detach().cpu().numpy() if probs.shape[1] > 1 else probs.squeeze().cpu().numpy()
 
     acc = accuracy_score(y_true, y_pred)
     macro_p, macro_r, macro_f1, _ = precision_recall_fscore_support(
         y_true, y_pred, average="macro", zero_division=0
     )
-    brier = brier_score_loss(y_true, y_prob)
+    if probs.shape[1] <= 2:
+        # Binary Brier score uses probability of positive class
+        y_prob = probs[:, -1].detach().cpu().numpy() if probs.shape[1] > 1 else probs_cpu.squeeze()
+        brier = brier_score_loss(y_true, y_prob)
+    else:
+        # Multiclass Brier via one-hot targets
+        y_true_oh = np.eye(probs.shape[1])[y_true]
+        brier = float(np.mean(np.sum((probs_cpu - y_true_oh) ** 2, axis=1)))
     return {
         "accuracy": acc,
         "macro_precision": macro_p,
@@ -35,7 +42,9 @@ def reliability_bins(probs: np.ndarray, labels: np.ndarray, n_bins: int = 15) ->
     bin_acc = np.zeros(n_bins)
     bin_count = np.zeros(n_bins)
     for i in range(n_bins):
-        mask = (conf > bins[i]) & (conf <= bins[i + 1])
+        # Include upper edge on last bin to cover conf==1.0
+        upper_inclusive = i == n_bins - 1
+        mask = (conf >= bins[i]) & (conf <= bins[i + 1] if upper_inclusive else conf < bins[i + 1])
         if mask.sum() == 0:
             continue
         bin_conf[i] = conf[mask].mean()

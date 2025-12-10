@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 @dataclass
 class TrainConfig:
-    # Data
+    # Data loading and augmentation
     data_root: str = "data"
     batch_size: int = 64
     num_workers: int = 4
@@ -16,7 +16,7 @@ class TrainConfig:
     color_jitter: Tuple[float, float, float, float] = (0.15, 0.15, 0.15, 0.05)
     balance_strategy: Optional[str] = "weighted_sampler"  # None, weighted_sampler, class_weights
 
-    # Model
+    # Model selection and architecture tweaks
     model_name: str = "resnet18"
     pretrained: bool = True
     num_classes: int = 2

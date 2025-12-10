@@ -28,6 +28,7 @@ def evaluate(
         labels = labels.to(device, non_blocking=True)
         outputs = model(images)
         if temperature is not None:
+            # Apply temperature scaling at inference if provided
             outputs = temperature(outputs)
         logits_list.append(outputs)
         labels_list.append(labels)

@@ -39,7 +39,7 @@ def main():
     print(f"Scanning data (Grouping by {args.precision} decimal places)...")
 
     # 1. Gather all images
-    # We need to track them by EXACT coordinate first to resolve conflicts
+    # Track images keyed by exact coordinate to resolve duplicates and conflicts
     coords_to_images = defaultdict(list)
 
     for root, _, files in os.walk(src_path):
@@ -96,7 +96,6 @@ def main():
     # 5. Write & Rename
     print("\nWriting dataset...")
     final_counts = Counter()
-    split_coords_registry = defaultdict(set)
 
     for split_name, keys in splits.items():
         for key in keys:
@@ -110,7 +109,6 @@ def main():
 
                 shutil.copy2(item["path"], dest)
                 final_counts[f"{split_name}/{item['label']}"] += 1
-                split_coords_registry[split_name].add(item["coords"])
 
     # 6. Verification
     print("\n--- STATS ---")

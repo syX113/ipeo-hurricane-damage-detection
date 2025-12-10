@@ -25,6 +25,7 @@ def build_transforms(cfg: TrainConfig, train: bool = True) -> transforms.Compose
 
 
 def describe_transforms(cfg: TrainConfig) -> Dict:
+    # Human-readable summary for logging
     return {
         "image_size": cfg.image_size,
         "horizontal_flip": cfg.horizontal_flip,

@@ -19,7 +19,6 @@ class DataModule:
         self.train_dataset: Optional[ImageFolder] = None
         self.val_dataset: Optional[ImageFolder] = None
         self.test_dataset: Optional[ImageFolder] = None
-        self._logger = None
 
     def setup(self) -> None:
         root = Path(self.cfg.data_root)
@@ -32,23 +31,25 @@ class DataModule:
         if self.cfg.data_integrity_check:
             self._report_integrity()
 
-    def _build_sampler(self, dataset: ImageFolder):
-        if self.cfg.balance_strategy != "weighted_sampler":
-            return None
-        counts = {}
-        for label in dataset.targets:
-            counts[label] = counts.get(label, 0) + 1
-        total = sum(counts.values())
-        class_weights = {cls: total / count for cls, count in counts.items()}
-        sample_weights = [class_weights[label] for label in dataset.targets]
-        return WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
+def _build_sampler(self, dataset: ImageFolder):
+    if self.cfg.balance_strategy != "weighted_sampler":
+        return None
+    # Compute per-class weight inverse to frequency
+    counts = {}
+    for label in dataset.targets:
+        counts[label] = counts.get(label, 0) + 1
+    total = sum(counts.values())
+    class_weights = {cls: total / count for cls, count in counts.items()}
+    sample_weights = [class_weights[label] for label in dataset.targets]
+    return WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
 
-    def _loader(self, dataset: ImageFolder, sampler=None, shuffle=False) -> DataLoader:
-        persistent = self.cfg.num_workers > 0
-        return DataLoader(
-            dataset,
-            batch_size=self.cfg.batch_size,
-            shuffle=shuffle if sampler is None else False,
+def _loader(self, dataset: ImageFolder, sampler=None, shuffle=False) -> DataLoader:
+    # Persistent workers avoid dataloader rebuild cost when num_workers > 0
+    persistent = self.cfg.num_workers > 0
+    return DataLoader(
+        dataset,
+        batch_size=self.cfg.batch_size,
+        shuffle=shuffle if sampler is None else False,
             sampler=sampler,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
@@ -80,7 +81,7 @@ class DataModule:
         """
         import logging
 
-        logger = self._logger or logging.getLogger(__name__)
+        logger = logging.getLogger(__name__)
 
         def coord_key(path: Path) -> str:
             return path.stem
@@ -98,6 +99,7 @@ class DataModule:
                 continue
             from collections import Counter
 
+            # Track labels and counts per coordinate stem
             labels_for_coord = {}
             counts_for_coord = {}
             class_counter = Counter()

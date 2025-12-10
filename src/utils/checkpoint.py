@@ -7,6 +7,7 @@ from models.builder import build_model
 
 
 def load_checkpoint(checkpoint_path: str, map_location: str = "cpu") -> Tuple[torch.nn.Module, TrainConfig]:
+    # Load model weights and config together for easy restoration
     checkpoint = torch.load(checkpoint_path, map_location=map_location)
     cfg = build_config_from_dict(checkpoint.get("config", {}))
     model = build_model(cfg)

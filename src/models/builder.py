@@ -1,6 +1,7 @@
 from functools import partial
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional, Tuple
 
+import torch
 import torch.nn as nn
 from torchvision import models
 
@@ -12,6 +13,7 @@ from .custom_time_detector import CustomTimeDetector
 def _get_weights(name: str, pretrained: bool):
     if not pretrained:
         return None
+    # Map model name to torchvision default weights
     return {
         "resnet18": models.ResNet18_Weights.DEFAULT,
         "resnet34": models.ResNet34_Weights.DEFAULT,
@@ -24,13 +26,29 @@ def _get_weights(name: str, pretrained: bool):
     }.get(name)
 
 
+def _find_first_conv(module: nn.Module) -> Optional[Tuple[nn.Module, str, nn.Conv2d]]:
+    for name, child in module.named_children():
+        if isinstance(child, nn.Conv2d):
+            return module, name, child
+        found = _find_first_conv(child)
+        if found is not None:
+            return found
+    return None
+
+
 def _adapt_first_conv(module: nn.Module, in_channels: int) -> None:
     """Expand/shrink first conv to support non-RGB inputs without reinitializing everything."""
-    if not hasattr(module, "conv1"):
+    target: Optional[Tuple[nn.Module, str, nn.Conv2d]] = None
+    if hasattr(module, "conv1"):
+        target = (module, "conv1", module.conv1)  # type: ignore[assignment]
+    elif hasattr(module, "features"):
+        target = _find_first_conv(module.features)  # type: ignore[arg-type]
+    if target is None:
         return
-    conv1 = module.conv1
+    parent, name, conv1 = target
     if conv1.in_channels == in_channels:
         return
+    # Recreate first conv to match requested channels while keeping learned weights
     new_conv = nn.Conv2d(
         in_channels=in_channels,
         out_channels=conv1.out_channels,
@@ -40,11 +58,15 @@ def _adapt_first_conv(module: nn.Module, in_channels: int) -> None:
         bias=conv1.bias is not None,
     )
     with torch.no_grad():
-        new_conv.weight[:, : conv1.in_channels] = conv1.weight
-        if in_channels > conv1.in_channels:
-            extra = in_channels - conv1.in_channels
-            new_conv.weight[:, conv1.in_channels :, :, :] = conv1.weight[:, :extra, :, :]
-    module.conv1 = new_conv
+        copy_channels = min(conv1.in_channels, in_channels)
+        new_conv.weight[:, :copy_channels] = conv1.weight[:, :copy_channels]
+        if in_channels > copy_channels:
+            extra = in_channels - copy_channels
+            fill = conv1.weight.mean(dim=1, keepdim=True)
+            new_conv.weight[:, copy_channels:, :, :] = fill.repeat(1, extra, 1, 1)
+        if conv1.bias is not None and new_conv.bias is not None:
+            new_conv.bias.copy_(conv1.bias)
+    setattr(parent, name, new_conv)
 
 
 def build_model(cfg: TrainConfig) -> nn.Module:
@@ -59,6 +81,7 @@ def build_model(cfg: TrainConfig) -> nn.Module:
         "convnext_small": partial(models.convnext_small),
     }
     if cfg.model_name == "custom_cnn":
+        # Lightweight baseline
         model = CustomCNN(
             in_channels=cfg.in_channels,
             num_classes=cfg.num_classes,
@@ -67,8 +90,9 @@ def build_model(cfg: TrainConfig) -> nn.Module:
         if cfg.freeze_backbone and hasattr(model, "features"):
             for name, param in model.features.named_parameters():
                 param.requires_grad = False
-        return model
+            return model
     if cfg.model_name == "custom_time_detector":
+        # Variant that can destroy spatial structure for ablation
         model = CustomTimeDetector(
             in_channels=cfg.in_channels,
             num_classes=cfg.num_classes,
@@ -88,6 +112,7 @@ def build_model(cfg: TrainConfig) -> nn.Module:
     model = registry[cfg.model_name](weights=weights)
 
     if hasattr(model, "fc"):
+        # Replace classification head for ResNet-like models
         in_features = model.fc.in_features
         head = []
         if cfg.dropout:
@@ -97,6 +122,7 @@ def build_model(cfg: TrainConfig) -> nn.Module:
     elif hasattr(model, "classifier"):
         classifier = model.classifier
         if isinstance(classifier, nn.Sequential):
+            # EfficientNet/ConvNeXt style sequential head
             in_features = classifier[-1].in_features  # type: ignore[index]
             classifier[-1] = nn.Linear(in_features, cfg.num_classes)  # type: ignore[index]
             model.classifier = classifier
@@ -112,6 +138,7 @@ def build_model(cfg: TrainConfig) -> nn.Module:
         for name, param in model.named_parameters():
             if "fc" in name or "classifier" in name:
                 continue
+            # Only finetune head if freezing backbone
             param.requires_grad = False
 
     return model

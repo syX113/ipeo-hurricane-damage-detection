@@ -9,6 +9,7 @@ import torch.nn.functional as F
 class TemperatureScaler(nn.Module):
     def __init__(self):
         super().__init__()
+        # Single learnable scalar applied to logits
         self.temperature = nn.Parameter(torch.ones(1))
 
     def forward(self, logits: torch.Tensor) -> torch.Tensor:
