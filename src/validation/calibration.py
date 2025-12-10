@@ -36,5 +36,8 @@ class TemperatureScaler(nn.Module):
     def load(path: str, device: Optional[torch.device] = None) -> "TemperatureScaler":
         state = torch.load(path, map_location=device or "cpu")
         scaler = TemperatureScaler()
-        scaler.temperature = nn.Parameter(state["temperature"])
+        temperature = state["temperature"]
+        if device is not None:
+            temperature = temperature.to(device)
+        scaler.temperature = nn.Parameter(temperature)
         return scaler
