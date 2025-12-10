@@ -31,49 +31,31 @@ class DataModule:
         if self.cfg.data_integrity_check:
             self._report_integrity()
 
-def _build_sampler(self, dataset: ImageFolder):
-    if self.cfg.balance_strategy != "weighted_sampler":
-        return None
-    # Compute per-class weight inverse to frequency
-    counts = {}
-    for label in dataset.targets:
-        counts[label] = counts.get(label, 0) + 1
-    total = sum(counts.values())
-    class_weights = {cls: total / count for cls, count in counts.items()}
-    sample_weights = [class_weights[label] for label in dataset.targets]
-    return WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
+    def _build_sampler(self, dataset: ImageFolder):
+        if self.cfg.balance_strategy != "weighted_sampler":
+            return None
+        # Compute per-class weight inverse to frequency
+        counts = {}
+        for label in dataset.targets:
+            counts[label] = counts.get(label, 0) + 1
+        total = sum(counts.values())
+        class_weights = {cls: total / count for cls, count in counts.items()}
+        sample_weights = [class_weights[label] for label in dataset.targets]
+        return WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
 
-def _loader(self, dataset: ImageFolder, sampler=None, shuffle=False) -> DataLoader:
-    # Persistent workers avoid dataloader rebuild cost when num_workers > 0
-    persistent = self.cfg.num_workers > 0
-    return DataLoader(
-        dataset,
-        batch_size=self.cfg.batch_size,
-        shuffle=shuffle if sampler is None else False,
+    def _loader(self, dataset: ImageFolder, sampler=None, shuffle=False) -> DataLoader:
+        # Persistent workers avoid dataloader rebuild cost when num_workers > 0
+        persistent = self.cfg.num_workers > 0
+        return DataLoader(
+            dataset,
+            batch_size=self.cfg.batch_size,
+            shuffle=shuffle if sampler is None else False,
             sampler=sampler,
             num_workers=self.cfg.num_workers,
             pin_memory=True,
             drop_last=shuffle,
             persistent_workers=persistent,
         )
-
-    def train_dataloader(self) -> DataLoader:
-        assert self.train_dataset is not None, "Call setup() first."
-        sampler = self._build_sampler(self.train_dataset)
-        return self._loader(self.train_dataset, sampler=sampler, shuffle=True)
-
-    def val_dataloader(self) -> DataLoader:
-        assert self.val_dataset is not None, "Call setup() first."
-        return self._loader(self.val_dataset, shuffle=False)
-
-    def test_dataloader(self) -> DataLoader:
-        assert self.test_dataset is not None, "Call setup() first."
-        return self._loader(self.test_dataset, shuffle=False)
-
-    def num_classes(self) -> int:
-        if self.train_dataset is None:
-            return 0
-        return len(self.train_dataset.classes)
 
     def _report_integrity(self) -> None:
         """
@@ -137,3 +119,21 @@ def _loader(self, dataset: ImageFolder, sampler=None, shuffle=False) -> DataLoad
         logger.info(
             "Split class counts: " f"train={dict(class_counts.get('train', {}))}, " f"val={dict(class_counts.get('validation', {}))}, " f"test={dict(class_counts.get('test', {}))}"
         )
+
+    def train_dataloader(self) -> DataLoader:
+        assert self.train_dataset is not None, "Call setup() first."
+        sampler = self._build_sampler(self.train_dataset)
+        return self._loader(self.train_dataset, sampler=sampler, shuffle=True)
+
+    def val_dataloader(self) -> DataLoader:
+        assert self.val_dataset is not None, "Call setup() first."
+        return self._loader(self.val_dataset, shuffle=False)
+
+    def test_dataloader(self) -> DataLoader:
+        assert self.test_dataset is not None, "Call setup() first."
+        return self._loader(self.test_dataset, shuffle=False)
+
+    def num_classes(self) -> int:
+        if self.train_dataset is None:
+            return 0
+        return len(self.train_dataset.classes)
