@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -7,8 +8,6 @@ try:
     from torch.utils.tensorboard import SummaryWriter
 except ImportError:
     SummaryWriter = None
-
-from tqdm.auto import tqdm
 
 from config import TrainConfig
 from data.datamodule import DataModule
@@ -58,9 +57,15 @@ class Trainer:
 
         Path(cfg.checkpoints_dir).mkdir(parents=True, exist_ok=True)
         self.tb_writer = None
-        if cfg.tensorboard and SummaryWriter is not None:
-            Path(cfg.tensorboard_dir).mkdir(parents=True, exist_ok=True)
-            self.tb_writer = SummaryWriter(log_dir=cfg.tensorboard_dir)
+        if cfg.tensorboard:
+            if SummaryWriter is None:
+                self.logger.warning("TensorBoard enabled but torch.utils.tensorboard is unavailable. Install tensorboard to log events.")
+            else:
+                tb_dir_base = Path(cfg.tensorboard_dir) if cfg.tensorboard_dir else Path("training_runs") / "tensorboard"
+                run_name = cfg.wandb_run_name or f"{cfg.model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                tb_run_dir = tb_dir_base / run_name
+                tb_run_dir.mkdir(parents=True, exist_ok=True)
+                self.tb_writer = SummaryWriter(log_dir=str(tb_run_dir), filename_suffix=f"-{run_name}")
 
     def _build_class_weights(self):
         if self.cfg.balance_strategy != "class_weights":
@@ -94,16 +99,7 @@ class Trainer:
         self.model.train()
         total_loss = 0.0
         total_samples = 0
-        iterable = self._iter_loader(self.train_loader)
-        if self.cfg.progress_bar:
-            iterable = tqdm(
-                iterable,
-                total=len(self.train_loader),
-                desc=f"Epoch {epoch+1}/{self.cfg.epochs}",
-                leave=False,
-            )
-
-        for images, labels in iterable:
+        for images, labels in self._iter_loader(self.train_loader):
             self.optimizer.zero_grad()
             with torch.amp.autocast(
                 device_type=self.device.type,

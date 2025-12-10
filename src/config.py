@@ -39,7 +39,6 @@ class TrainConfig:
     grad_clip_norm: Optional[float] = 1.0
     early_stopping: int = 10
     checkpoint_metric: str = "macro_f1"
-    progress_bar: bool = True
 
     # Evaluation
     threshold: float = 0.5
@@ -54,7 +53,7 @@ class TrainConfig:
     wandb_run_name: Optional[str] = None
     wandb_tags: List[str] = field(default_factory=list)
     tensorboard: bool = False
-    tensorboard_dir: str = "artifacts/tensorboard"
+    tensorboard_dir: Optional[str] = "training_runs/tensorboard"
 
     # Misc
     seed: int = 42

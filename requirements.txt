@@ -10,5 +10,6 @@ tqdm
 scikit-learn
 wandb
 ipywidgets
+tensorboard
 
 # Install PyTorch separately (GPU/CPU instructions in README).
