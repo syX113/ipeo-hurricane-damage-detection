@@ -18,6 +18,7 @@ import seaborn as sns
 from matplotlib.patches import Rectangle
 from mpl_toolkits.mplot3d import art3d
 from PIL import Image, ImageEnhance, ImageOps
+from matplotlib.ticker import MaxNLocator
 
 from IPython.display import display
 
@@ -800,9 +801,20 @@ def _resolve_zoom_box(
     pad: float = 0.0,
     auto_bins: int = 50,
     auto_expand_bins: int = 1,
+    peak_quantile: float = 0.05,
+    rel_pad: float = 0.01,
+    min_span: float = 0.01,
 ):
     if zoom_box is not None:
         (lon_min, lon_max), (lat_min, lat_max) = zoom_box
+        lon_center = (lon_min + lon_max) / 2
+        lat_center = (lat_min + lat_max) / 2
+        lon_span = max(abs(lon_max - lon_min), min_span)
+        lat_span = max(abs(lat_max - lat_min), min_span)
+        lon_min = lon_center - lon_span / 2
+        lon_max = lon_center + lon_span / 2
+        lat_min = lat_center - lat_span / 2
+        lat_max = lat_center + lat_span / 2
     else:
         combined = pd.concat([df.dropna(subset=["lon", "lat"])[["lon", "lat"]] for df in dfs], ignore_index=True)
         if combined.empty:
@@ -811,18 +823,44 @@ def _resolve_zoom_box(
         lat_vals = combined["lat"].to_numpy()
         hist, lon_edges, lat_edges = np.histogram2d(lon_vals, lat_vals, bins=auto_bins)
         max_idx = np.unravel_index(np.argmax(hist), hist.shape)
-        lon_min = lon_edges[max(max_idx[0] - auto_expand_bins, 0)]
-        lon_max = lon_edges[min(max_idx[0] + auto_expand_bins + 1, len(lon_edges) - 1)]
-        lat_min = lat_edges[max(max_idx[1] - auto_expand_bins, 0)]
-        lat_max = lat_edges[min(max_idx[1] + auto_expand_bins + 1, len(lat_edges) - 1)]
+        lon_lower_edge = lon_edges[max(max_idx[0] - auto_expand_bins, 0)]
+        lon_upper_edge = lon_edges[min(max_idx[0] + auto_expand_bins + 1, len(lon_edges) - 1)]
+        lat_lower_edge = lat_edges[max(max_idx[1] - auto_expand_bins, 0)]
+        lat_upper_edge = lat_edges[min(max_idx[1] + auto_expand_bins + 1, len(lat_edges) - 1)]
+
+        in_peak = (lon_vals >= lon_lower_edge) & (lon_vals <= lon_upper_edge) & (lat_vals >= lat_lower_edge) & (lat_vals <= lat_upper_edge)
+        peak_points = combined[in_peak]
+        if peak_points.empty:
+            lon_min, lon_max = combined["lon"].quantile([peak_quantile, 1 - peak_quantile])
+            lat_min, lat_max = combined["lat"].quantile([peak_quantile, 1 - peak_quantile])
+        else:
+            lon_min, lon_max = peak_points["lon"].quantile([peak_quantile, 1 - peak_quantile])
+            lat_min, lat_max = peak_points["lat"].quantile([peak_quantile, 1 - peak_quantile])
+
+        lon_span = max(float(lon_max) - float(lon_min), min_span)
+        lat_span = max(float(lat_max) - float(lat_min), min_span)
+        lon_pad = max(pad, lon_span * rel_pad)
+        lat_pad = max(pad, lat_span * rel_pad)
+        lon_min, lon_max = float(lon_min) - lon_pad, float(lon_max) + lon_pad
+        lat_min, lat_max = float(lat_min) - lat_pad, float(lat_max) + lat_pad
+        return ((lon_min, lon_max), (lat_min, lat_max))
     lon_min, lon_max = sorted((float(lon_min), float(lon_max)))
     lat_min, lat_max = sorted((float(lat_min), float(lat_max)))
     return ((lon_min - pad, lon_max + pad), (lat_min - pad, lat_max + pad))
 
 
-def _add_zoom_box(ax, zoom_box: Tuple[Tuple[float, float], Tuple[float, float]], z_level: float, color: str = "#c54a6b", linewidth: float = 2.0):
+def _add_zoom_box(ax, zoom_box: Tuple[Tuple[float, float], Tuple[float, float]], z_level: float, color: str = "#c54a6b", linewidth: float = 2.0, fill_alpha: float | None = None):
     (lon_min, lon_max), (lat_min, lat_max) = zoom_box
-    rect = Rectangle((lon_min, lat_min), lon_max - lon_min, lat_max - lat_min, fill=False, lw=linewidth, ec=color)
+    rect = Rectangle(
+        (lon_min, lat_min),
+        lon_max - lon_min,
+        lat_max - lat_min,
+        fill=fill_alpha is not None,
+        lw=linewidth,
+        ec=color,
+        fc=color if fill_alpha is not None else "none",
+        alpha=fill_alpha,
+    )
     ax.add_patch(rect)
     art3d.pathpatch_2d_to_3d(rect, z=z_level, zdir="z")
 
@@ -833,11 +871,30 @@ def _apply_zoom_limits(ax, zoom_box: Tuple[Tuple[float, float], Tuple[float, flo
     ax.set_ylim(lat_min, lat_max)
 
 
+def _set_box_aspect_from_limits(ax, z_scale: float = 1.0, min_span: float = 0.02, equalize: bool = True):
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    zlim = ax.get_zlim()
+    spans = [
+        max(abs(xlim[1] - xlim[0]), min_span),
+        max(abs(ylim[1] - ylim[0]), min_span),
+        max(abs(zlim[1] - zlim[0]) * z_scale, min_span),
+    ]
+    if equalize:
+        max_span = max(spans)
+        spans = [max_span, max_span, max_span]
+    ax.set_box_aspect(tuple(spans))
+
+
+def _apply_tick_locators(ax, n_ticks: int = 4):
+    ax.xaxis.set_major_locator(MaxNLocator(n_ticks))
+    ax.yaxis.set_major_locator(MaxNLocator(n_ticks))
+
+
 def _scatter_split_stack(ax, df: pd.DataFrame, label_palette: Dict[str, str], zoom_box: Tuple[Tuple[float, float], Tuple[float, float]] | None = None, clip_to_zoom: bool = False):
     valid = df.dropna(subset=["lon", "lat"])
     split_order = sorted(valid["split"].unique())
     split_to_z = {s: i for i, s in enumerate(split_order)}
-    colors = valid["label"].map(label_palette).fillna("#888888")
     plot_df = valid
     if clip_to_zoom and zoom_box is not None:
         (lon_min, lon_max), (lat_min, lat_max) = zoom_box
@@ -847,6 +904,7 @@ def _scatter_split_stack(ax, df: pd.DataFrame, label_palette: Dict[str, str], zo
             & (valid["lat"] >= lat_min)
             & (valid["lat"] <= lat_max)
         ]
+    colors = plot_df["label"].map(label_palette).fillna("#888888")
     ax.scatter(plot_df["lon"], plot_df["lat"], plot_df["split"].map(split_to_z), c=colors, s=14, alpha=0.75, edgecolors="none")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
@@ -856,12 +914,20 @@ def _scatter_split_stack(ax, df: pd.DataFrame, label_palette: Dict[str, str], zo
     return split_to_z
 
 
-def plot_split_stack_3d_pair(ctx: RunbookContext, left_df: pd.DataFrame, right_df: pd.DataFrame, left_tag: str, right_tag: str, elev: float = 25.0, azim: float = -60.0, include_zoom: bool = True, zoom_box: Tuple[Tuple[float, float], Tuple[float, float]] | None = None, zoom_padding: float = 0.0, box_color: str = "#c54a6b", auto_zoom_bins: int = 60, auto_expand_bins: int = 1):
+def plot_split_stack_3d_pair(ctx: RunbookContext, left_df: pd.DataFrame, right_df: pd.DataFrame, left_tag: str, right_tag: str, elev: float = 25.0, azim: float = -60.0, include_zoom: bool = True, zoom_box: Tuple[Tuple[float, float], Tuple[float, float]] | None = None, zoom_padding: float = 0.0, box_color: str = "#c54a6b", auto_zoom_bins: int = 140, auto_expand_bins: int = 0, auto_peak_quantile: float = 0.01, auto_rel_pad: float = 0.01):
     if left_df.dropna(subset=["lon", "lat"]).empty or right_df.dropna(subset=["lon", "lat"]).empty:
         print("Not enough coordinates in one of the datasets to plot 3D comparison.")
         return
 
-    resolved_zoom = _resolve_zoom_box([left_df, right_df], zoom_box, pad=zoom_padding, auto_bins=auto_zoom_bins, auto_expand_bins=auto_expand_bins) if include_zoom else None
+    resolved_zoom = _resolve_zoom_box(
+        [left_df, right_df],
+        zoom_box,
+        pad=zoom_padding,
+        auto_bins=auto_zoom_bins,
+        auto_expand_bins=auto_expand_bins,
+        peak_quantile=auto_peak_quantile,
+        rel_pad=auto_rel_pad,
+    ) if include_zoom else None
     if include_zoom and resolved_zoom is not None:
         fig = plt.figure(figsize=(14, 12))
         grid = fig.add_gridspec(2, 2, hspace=0.2, wspace=0.15)
@@ -872,23 +938,31 @@ def plot_split_stack_3d_pair(ctx: RunbookContext, left_df: pd.DataFrame, right_d
 
         left_split_to_z = _scatter_split_stack(ax1, left_df, ctx.label_palette, resolved_zoom)
         left_box_z = min(left_split_to_z.values()) - 0.15 if left_split_to_z else -0.1
-        _add_zoom_box(ax1, resolved_zoom, left_box_z, color=box_color)
+        _add_zoom_box(ax1, resolved_zoom, left_box_z, color=box_color, fill_alpha=0.08)
         ax1.set_title(f"{left_tag}: coord stack")
         ax1.view_init(elev=elev, azim=azim)
+        _set_box_aspect_from_limits(ax1, z_scale=0.7, min_span=0.01)
+        _apply_tick_locators(ax1, n_ticks=4)
 
         right_split_to_z = _scatter_split_stack(ax2, right_df, ctx.label_palette, resolved_zoom)
         right_box_z = min(right_split_to_z.values()) - 0.15 if right_split_to_z else -0.1
-        _add_zoom_box(ax2, resolved_zoom, right_box_z, color=box_color)
+        _add_zoom_box(ax2, resolved_zoom, right_box_z, color=box_color, fill_alpha=0.08)
         ax2.set_title(f"{right_tag}: coord stack")
         ax2.view_init(elev=elev, azim=azim)
+        _set_box_aspect_from_limits(ax2, z_scale=0.7, min_span=0.01)
+        _apply_tick_locators(ax2, n_ticks=4)
 
         _scatter_split_stack(ax3, left_df, ctx.label_palette, resolved_zoom, clip_to_zoom=True)
         _apply_zoom_limits(ax3, resolved_zoom)
+        _set_box_aspect_from_limits(ax3, z_scale=0.7, min_span=0.01)
+        _apply_tick_locators(ax3, n_ticks=4)
         ax3.set_title(f"{left_tag}: zoom")
         ax3.view_init(elev=elev, azim=azim)
 
         _scatter_split_stack(ax4, right_df, ctx.label_palette, resolved_zoom, clip_to_zoom=True)
         _apply_zoom_limits(ax4, resolved_zoom)
+        _set_box_aspect_from_limits(ax4, z_scale=0.7, min_span=0.01)
+        _apply_tick_locators(ax4, n_ticks=4)
         ax4.set_title(f"{right_tag}: zoom")
         ax4.view_init(elev=elev, azim=azim)
 
@@ -904,9 +978,13 @@ def plot_split_stack_3d_pair(ctx: RunbookContext, left_df: pd.DataFrame, right_d
     _scatter_split_stack(ax1, left_df, ctx.label_palette)
     ax1.set_title(f"{left_tag}: coord stack")
     ax1.view_init(elev=elev, azim=azim)
+    _set_box_aspect_from_limits(ax1, z_scale=0.7, min_span=0.01)
+    _apply_tick_locators(ax1, n_ticks=4)
     _scatter_split_stack(ax2, right_df, ctx.label_palette)
     ax2.set_title(f"{right_tag}: coord stack")
     ax2.view_init(elev=elev, azim=azim)
+    _set_box_aspect_from_limits(ax2, z_scale=0.7, min_span=0.01)
+    _apply_tick_locators(ax2, n_ticks=4)
     plt.tight_layout()
     save_fig(ctx, fig, "compare", "split_stack_3d_side_by_side")
     plt.show()
