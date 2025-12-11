@@ -1,0 +1,60 @@
+{
+  "data_root": "data",
+  "batch_size": 48,
+  "num_workers": 4,
+  "image_size": 256,
+  "mean": [
+    0.43,
+    0.411,
+    0.374
+  ],
+  "std": [
+    0.218,
+    0.207,
+    0.203
+  ],
+  "horizontal_flip": 0.5,
+  "max_rotation": 15.0,
+  "color_jitter": [
+    0.15,
+    0.15,
+    0.15,
+    0.05
+  ],
+  "balance_strategy": "weighted_sampler",
+  "model_name": "resnet34",
+  "pretrained": true,
+  "num_classes": 2,
+  "dropout": 0.2,
+  "in_channels": 3,
+  "freeze_backbone": false,
+  "custom_shuffle_pixels": false,
+  "custom_pointwise_conv": false,
+  "optimizer": "adamw",
+  "lr": 0.0003,
+  "weight_decay": 0.0001,
+  "betas": [
+    0.9,
+    0.999
+  ],
+  "momentum": 0.9,
+  "epochs": 50,
+  "label_smoothing": 0.05,
+  "amp": true,
+  "grad_clip_norm": 1.0,
+  "early_stopping": 12,
+  "checkpoint_metric": "macro_f1",
+  "threshold": 0.5,
+  "reliability_bins": 15,
+  "apply_temperature": false,
+  "checkpoints_dir": "training_runs/original_20251210-201837_resnet34/artifacts/checkpoints",
+  "wandb_mode": "disabled",
+  "wandb_project": "hurricane-damage",
+  "wandb_entity": null,
+  "wandb_run_name": null,
+  "wandb_tags": [],
+  "tensorboard": true,
+  "tensorboard_dir": "training_runs/tensorboard",
+  "seed": 42,
+  "data_integrity_check": true
+}

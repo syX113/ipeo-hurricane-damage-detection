@@ -1,0 +1,35 @@
+{
+  "val_raw": {
+    "accuracy": 0.986,
+    "macro_precision": 0.9860311059907834,
+    "macro_recall": 0.986,
+    "macro_f1": 0.985999775996416,
+    "brier": 0.013822177682229384,
+    "ece": 0.03819110313057897
+  },
+  "test_raw": {
+    "accuracy": 0.985,
+    "macro_precision": 0.985,
+    "macro_recall": 0.985,
+    "macro_f1": 0.985,
+    "brier": 0.014195001195671178,
+    "ece": 0.03732321003079413
+  },
+  "val_calibrated": {
+    "accuracy": 0.986,
+    "macro_precision": 0.9860311059907834,
+    "macro_recall": 0.986,
+    "macro_f1": 0.985999775996416,
+    "brier": 0.012762042811802125,
+    "ece": 0.021417029142379754
+  },
+  "test_calibrated": {
+    "accuracy": 0.985,
+    "macro_precision": 0.985,
+    "macro_recall": 0.985,
+    "macro_f1": 0.985,
+    "brier": 0.013168837380141173,
+    "ece": 0.01751346170902248
+  },
+  "temperature": 0.7977744340896606
+}
