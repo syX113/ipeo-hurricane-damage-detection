@@ -25,4 +25,16 @@ def load_checkpoint(checkpoint_path, map_location="cpu"):
     return _load_checkpoint(checkpoint_path, map_location=map_location)
 
 
-__all__ = ["get_logger", "init_wandb", "set_seed", "load_checkpoint"]
+def resolve_project_root():
+    from .paths import resolve_project_root as _resolve_project_root
+
+    return _resolve_project_root()
+
+
+__all__ = [
+    "get_logger",
+    "init_wandb",
+    "set_seed",
+    "load_checkpoint",
+    "resolve_project_root",
+]
