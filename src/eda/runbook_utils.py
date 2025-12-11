@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.patches import Rectangle
+from mpl_toolkits.mplot3d import art3d
 from PIL import Image, ImageEnhance, ImageOps
 
 from IPython.display import display
@@ -792,12 +794,60 @@ def plot_split_stack_3d(ctx: RunbookContext, df: pd.DataFrame, dataset_tag: str,
     plt.show()
 
 
-def _scatter_split_stack(ax, df: pd.DataFrame, label_palette: Dict[str, str]):
+def _resolve_zoom_box(
+    dfs: List[pd.DataFrame],
+    zoom_box: Tuple[Tuple[float, float], Tuple[float, float]] | None,
+    pad: float = 0.0,
+    auto_bins: int = 50,
+    auto_expand_bins: int = 1,
+):
+    if zoom_box is not None:
+        (lon_min, lon_max), (lat_min, lat_max) = zoom_box
+    else:
+        combined = pd.concat([df.dropna(subset=["lon", "lat"])[["lon", "lat"]] for df in dfs], ignore_index=True)
+        if combined.empty:
+            return None
+        lon_vals = combined["lon"].to_numpy()
+        lat_vals = combined["lat"].to_numpy()
+        hist, lon_edges, lat_edges = np.histogram2d(lon_vals, lat_vals, bins=auto_bins)
+        max_idx = np.unravel_index(np.argmax(hist), hist.shape)
+        lon_min = lon_edges[max(max_idx[0] - auto_expand_bins, 0)]
+        lon_max = lon_edges[min(max_idx[0] + auto_expand_bins + 1, len(lon_edges) - 1)]
+        lat_min = lat_edges[max(max_idx[1] - auto_expand_bins, 0)]
+        lat_max = lat_edges[min(max_idx[1] + auto_expand_bins + 1, len(lat_edges) - 1)]
+    lon_min, lon_max = sorted((float(lon_min), float(lon_max)))
+    lat_min, lat_max = sorted((float(lat_min), float(lat_max)))
+    return ((lon_min - pad, lon_max + pad), (lat_min - pad, lat_max + pad))
+
+
+def _add_zoom_box(ax, zoom_box: Tuple[Tuple[float, float], Tuple[float, float]], z_level: float, color: str = "#c54a6b", linewidth: float = 2.0):
+    (lon_min, lon_max), (lat_min, lat_max) = zoom_box
+    rect = Rectangle((lon_min, lat_min), lon_max - lon_min, lat_max - lat_min, fill=False, lw=linewidth, ec=color)
+    ax.add_patch(rect)
+    art3d.pathpatch_2d_to_3d(rect, z=z_level, zdir="z")
+
+
+def _apply_zoom_limits(ax, zoom_box: Tuple[Tuple[float, float], Tuple[float, float]]):
+    (lon_min, lon_max), (lat_min, lat_max) = zoom_box
+    ax.set_xlim(lon_min, lon_max)
+    ax.set_ylim(lat_min, lat_max)
+
+
+def _scatter_split_stack(ax, df: pd.DataFrame, label_palette: Dict[str, str], zoom_box: Tuple[Tuple[float, float], Tuple[float, float]] | None = None, clip_to_zoom: bool = False):
     valid = df.dropna(subset=["lon", "lat"])
     split_order = sorted(valid["split"].unique())
     split_to_z = {s: i for i, s in enumerate(split_order)}
     colors = valid["label"].map(label_palette).fillna("#888888")
-    ax.scatter(valid["lon"], valid["lat"], valid["split"].map(split_to_z), c=colors, s=14, alpha=0.75, edgecolors="none")
+    plot_df = valid
+    if clip_to_zoom and zoom_box is not None:
+        (lon_min, lon_max), (lat_min, lat_max) = zoom_box
+        plot_df = valid[
+            (valid["lon"] >= lon_min)
+            & (valid["lon"] <= lon_max)
+            & (valid["lat"] >= lat_min)
+            & (valid["lat"] <= lat_max)
+        ]
+    ax.scatter(plot_df["lon"], plot_df["lat"], plot_df["split"].map(split_to_z), c=colors, s=14, alpha=0.75, edgecolors="none")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
     ax.set_zlabel("Split")
@@ -806,10 +856,48 @@ def _scatter_split_stack(ax, df: pd.DataFrame, label_palette: Dict[str, str]):
     return split_to_z
 
 
-def plot_split_stack_3d_pair(ctx: RunbookContext, left_df: pd.DataFrame, right_df: pd.DataFrame, left_tag: str, right_tag: str, elev: float = 25.0, azim: float = -60.0):
+def plot_split_stack_3d_pair(ctx: RunbookContext, left_df: pd.DataFrame, right_df: pd.DataFrame, left_tag: str, right_tag: str, elev: float = 25.0, azim: float = -60.0, include_zoom: bool = True, zoom_box: Tuple[Tuple[float, float], Tuple[float, float]] | None = None, zoom_padding: float = 0.0, box_color: str = "#c54a6b", auto_zoom_bins: int = 60, auto_expand_bins: int = 1):
     if left_df.dropna(subset=["lon", "lat"]).empty or right_df.dropna(subset=["lon", "lat"]).empty:
         print("Not enough coordinates in one of the datasets to plot 3D comparison.")
         return
+
+    resolved_zoom = _resolve_zoom_box([left_df, right_df], zoom_box, pad=zoom_padding, auto_bins=auto_zoom_bins, auto_expand_bins=auto_expand_bins) if include_zoom else None
+    if include_zoom and resolved_zoom is not None:
+        fig = plt.figure(figsize=(14, 12))
+        grid = fig.add_gridspec(2, 2, hspace=0.2, wspace=0.15)
+        ax1 = fig.add_subplot(grid[0, 0], projection="3d")
+        ax2 = fig.add_subplot(grid[0, 1], projection="3d")
+        ax3 = fig.add_subplot(grid[1, 0], projection="3d")
+        ax4 = fig.add_subplot(grid[1, 1], projection="3d")
+
+        left_split_to_z = _scatter_split_stack(ax1, left_df, ctx.label_palette, resolved_zoom)
+        left_box_z = min(left_split_to_z.values()) - 0.15 if left_split_to_z else -0.1
+        _add_zoom_box(ax1, resolved_zoom, left_box_z, color=box_color)
+        ax1.set_title(f"{left_tag}: coord stack")
+        ax1.view_init(elev=elev, azim=azim)
+
+        right_split_to_z = _scatter_split_stack(ax2, right_df, ctx.label_palette, resolved_zoom)
+        right_box_z = min(right_split_to_z.values()) - 0.15 if right_split_to_z else -0.1
+        _add_zoom_box(ax2, resolved_zoom, right_box_z, color=box_color)
+        ax2.set_title(f"{right_tag}: coord stack")
+        ax2.view_init(elev=elev, azim=azim)
+
+        _scatter_split_stack(ax3, left_df, ctx.label_palette, resolved_zoom, clip_to_zoom=True)
+        _apply_zoom_limits(ax3, resolved_zoom)
+        ax3.set_title(f"{left_tag}: zoom")
+        ax3.view_init(elev=elev, azim=azim)
+
+        _scatter_split_stack(ax4, right_df, ctx.label_palette, resolved_zoom, clip_to_zoom=True)
+        _apply_zoom_limits(ax4, resolved_zoom)
+        ax4.set_title(f"{right_tag}: zoom")
+        ax4.view_init(elev=elev, azim=azim)
+
+        fig.suptitle(f"{left_tag} vs {right_tag}: coord stack + zoom")
+        fig.subplots_adjust(top=0.93, hspace=0.2, wspace=0.15)
+        save_fig(ctx, fig, "compare", "split_stack_3d_side_by_side_zoom")
+        plt.show()
+        return
+
     fig = plt.figure(figsize=(14, 6))
     ax1 = fig.add_subplot(121, projection="3d")
     ax2 = fig.add_subplot(122, projection="3d")
