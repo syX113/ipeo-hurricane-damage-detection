@@ -18,30 +18,23 @@ data/
   test/{damage,no_damage}
 ```
 3) Optional cleaning (recommended to avoid leakage/duplicates):
-- Coordinate grouping only: `python src/utils/build_coordinate_split.py --data-root data --output-root data_resampled`
-- Full cleaning + optional majority downsampling: `python src/utils/build_clean_dataset.py --data-root data --output-root data_clean --balance-multiplier 1.0 --drop-conflicts`
-Point `TrainConfig.data_root` to the chosen cleaned directory.
+- Coordinate grouping and leak-free split: `python src/data/resample_dataset.py --data-root data --output-root data_resampled --val-split 0.15 --test-split 0.15 --precision 1`
+Point `TrainConfig.data_root` to the chosen cleaned directory; relative paths resolve from the repo root.
 
 ## Workflow (overview)
 
 ```mermaid
 graph TD
-  A["Raw data in data/{train,validation,test}/damage,no_damage"] --> B["Split inspection<br/>notebooks/00_split_inspection.ipynb"]
-  B --> C["EDA<br/>notebooks/00_exploratory_analysis.ipynb"]
-  C --> D{Build cleaned splits}
-  D --> D1["data_resampled<br/>build_coordinate_split.py<br/>(no cross-split coord leakage)"]
-  D --> D2["data_clean<br/>build_clean_dataset.py<br/>(dedup, optional drop conflicts,<br/>optional downsample majority)"]
-  D1 --> E["TrainConfig<br/>src/config.py"]
-  D2 --> E
-  E --> F["DataModule<br/>transforms + sampler<br/>src/data"]
-  F --> G["Model builder<br/>replace classifier head<br/>_adapt_first_conv for non-RGB<br/>optional freeze backbone<br/>src/models"]
-  G --> H["Trainer.fit<br/>CE+label smoothing (+class weights)<br/>AdamW/SGD + cosine LR<br/>AMP + grad clip + early stop<br/>save best.pt<br/>src/training"]
-  H --> I["Val metrics per epoch"]
-  H --> J["best.pt checkpoint"]
-  J --> K["Temperature scaling on val logits<br/>LBFGS scalar T<br/>src/validation/calibration.py"]
-  K --> L["Eval raw + calibrated<br/>notebooks/02_evaluate.ipynb"]
-  L --> M["Metrics: accuracy, macro P/R/F1,<br/>Brier, ECE; plots (confusion,<br/>score hist, reliability)"]
-  M --> N["Compare runs<br/>notebooks/03_comparison.ipynb"]
+  A["Raw data in data/{train,validation,test}/damage,no_damage"] --> B["EDA + leakage checks<br/>notebooks/00_dataset_analysis.ipynb"]
+  B --> C["Optional clean split<br/>src/data/resample_dataset.py<br/>(dedupe coords and avoid leakage)"]
+  C --> D["TrainConfig<br/>src/config.py (paths, augs, balance)"]
+  D --> E["DataModule<br/>ImageFolder + transforms + sampler<br/>src/data"]
+  E --> F["Training runs<br/>notebooks/02_train_networks.ipynb or Trainer.fit<br/>src/training"]
+  F --> G["best.pt + training_runs/{session_model}"]
+  F --> H["Activation maps<br/>notebooks/01_cnn_activation_maps.ipynb"]
+  G --> I["Eval + temperature scaling<br/>notebooks/03_evaluate_networks.ipynb"]
+  I --> J["Compare models<br/>notebooks/04_compare_networks.ipynb"]
+  J --> K["Final export/inference<br/>notebooks/05_final_training.ipynb"]
 ```
 
 ## Quick start (code)
@@ -50,24 +43,26 @@ from config import TrainConfig
 from training import Trainer
 
 cfg = TrainConfig(
-    data_root="data",   # or data_resampled
+    data_root="data_resampled",  # or data
     model_name="resnet34",
     epochs=20,
+    data_integrity_check=True,
     wandb_mode="disabled",
 )
 trainer = Trainer(cfg)
 trainer.fit()
 print(trainer.test())
 ```
+Set `data_integrity_check=True` to log coordinate overlap and class counts by split during datamodule setup.
 
 ## Training details
 - Config: `src/config.py` (`TrainConfig`, `build_config_from_dict`).
   - Data/augs: resize, flip, rotation, color jitter; dataset mean/std.
   - Imbalance: `balance_strategy` = `weighted_sampler` (sampler) or `class_weights` (loss).
   - Optimization: AdamW/SGD, cosine LR, label smoothing, grad clip, AMP, early stopping on `macro_f1`.
-  - Logging/checkpoints: `checkpoints_dir` (best.pt), optional TensorBoard/W&B.
+  - Logging/checkpoints: `checkpoints_dir` (best.pt) resolved from repo root, optional TensorBoard/W&B.
 - Data loaders: `src/data/transforms.py`, `src/data/datamodule.py`.
-  - ImageFolder, train/eval transforms, optional integrity summary of coord overlaps/conflicts.
+  - ImageFolder, train/eval transforms, optional integrity summary of coord overlaps/conflicts when `data_integrity_check=True`.
 - Models: `src/models/builder.py`, `src/models/custom.py`.
   - Backbones: resnet18/34/50, efficientnet_b0/b1/b2, convnext_tiny/small, or lightweight `custom_cnn`.
   - Head replacement to `num_classes=2` with optional dropout.
@@ -76,7 +71,7 @@ print(trainer.test())
 - Training loop: `src/training/trainer.py`.
   - Loss = cross-entropy + label smoothing (+ optional class weights).
   - Scheduler = cosine annealing; AMP + GradScaler; gradient clipping.
-  - Early stopping on validation `checkpoint_metric`; stores best checkpoint.
+  - Early stopping on validation `checkpoint_metric`; stores best checkpoint; AMP enabled only when CUDA is available.
 
 ## Calibration and metrics
 - Metrics (`src/validation/metrics.py`): accuracy, macro precision/recall/F1, Brier score (probability quality), ECE via reliability bins (calibration gap), plus reliability bin details.
@@ -84,18 +79,19 @@ print(trainer.test())
 - Evaluation loop (`src/validation/evaluate.py`): collects logits/labels, computes metrics, supports optional temperature scaling at eval time.
 
 ## Notebooks
-- `00_split_inspection.ipynb`: split/class counts, coord overlaps, near neighbors, conflicts, duplicates, visual samples.
-- `00_exploratory_analysis.ipynb`: spatial maps, pixel stats, brightness/contrast, augmentation previews, corruption/duplicate checks.
-- `01_train.ipynb`: runs experiments with per-model overrides (resnets, efficientnets, convnexts, custom CNN) and saves configs/plots/summaries under `training_runs/{session}_{model}`.
-- `02_evaluate.ipynb`: loads each run, evaluates val/test raw and calibrated, writes `eval_metrics.json` and plots (confusion, score hist, reliability).
-- `03_comparison.ipynb`: aggregates runs for a session, compares test macro-F1 and ECE (raw vs calibrated), temperatures, and validation trajectories.
+- `00_dataset_analysis.ipynb`: split/class counts, coordinate overlap/leakage checks, duplicates, spatial maps, augmentation previews.
+- `01_cnn_activation_maps.ipynb`: loads trained checkpoints to visualize Grad-CAMs and activation patterns for interpretability.
+- `02_train_networks.ipynb`: launches training runs across backbones with per-model overrides, writes configs/plots/summaries under `training_runs/{session}_{model}`.
+- `03_evaluate_networks.ipynb`: evaluates val/test with optional temperature scaling, saves `eval_metrics.json` plus reliability/confusion/score plots.
+- `04_compare_networks.ipynb`: aggregates evaluation outputs to compare accuracy/F1/calibration across models and sessions.
+- `05_final_training.ipynb`: final targeted run using the selected recipe; exports best checkpoint and temperature for deployment.
 
 ## Repo map
 - `src/config.py`: configuration objects and helpers.
-- `src/data/`: transforms and datamodule (ImageFolder + sampler).
+- `src/data/`: transforms and datamodule (ImageFolder + sampler); leak-free resampling script (`resample_dataset.py`).
 - `src/models/`: backbone builder + custom CNN.
 - `src/training/`: training loop, checkpointing, early stopping.
 - `src/validation/`: evaluation, metrics (Brier/ECE), temperature scaling.
-- `src/utils/`: logging, reproducibility, checkpoint loader, data cleaning scripts.
+- `src/utils/`: logging, reproducibility, checkpoint loader.
 - `training_runs/`: outputs from notebook runs (configs, summaries, checkpoints, plots).
-- `eda_plots/`: saved figures from EDA notebooks.
+- `plots/`: saved figures from EDA and experiment notebooks.

@@ -15,6 +15,7 @@ from models.builder import build_model
 from validation.evaluate import evaluate
 from validation.calibration import TemperatureScaler
 from utils.logging import get_logger, init_wandb
+from utils.paths import resolve_project_root
 from utils.reproducibility import set_seed as set_global_seed
 
 
@@ -33,6 +34,7 @@ class Trainer:
         self.set_seed(cfg.seed)
         self.logger = get_logger()
         self.run = init_wandb(cfg)
+        self.project_root = resolve_project_root()
 
         # Build dataloaders
         self.datamodule = DataModule(cfg)
@@ -49,19 +51,23 @@ class Trainer:
         # Cosine schedule by default for decay
         self.optimizer = self._build_optimizer()
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=cfg.epochs, eta_min=1e-6)
-        self.scaler = torch.amp.GradScaler(enabled=cfg.amp)
+        self.scaler = torch.amp.GradScaler(enabled=cfg.amp and self.device.type == "cuda")
 
         self.best_metric = -float("inf")
         self.best_val_outputs: Optional[Dict] = None
         self.temperature: Optional[TemperatureScaler] = None
 
-        Path(cfg.checkpoints_dir).mkdir(parents=True, exist_ok=True)
+        ckpt_dir = Path(cfg.checkpoints_dir).expanduser()
+        # Keep artifacts under the project root regardless of working directory
+        self.checkpoints_dir = ckpt_dir if ckpt_dir.is_absolute() else (self.project_root / ckpt_dir)
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
         self.tb_writer = None
         if cfg.tensorboard:
             if SummaryWriter is None:
                 self.logger.warning("TensorBoard enabled but torch.utils.tensorboard is unavailable. Install tensorboard to log events.")
             else:
-                tb_dir_base = Path(cfg.tensorboard_dir) if cfg.tensorboard_dir else Path("training_runs") / "tensorboard"
+                tb_dir_base = Path(cfg.tensorboard_dir).expanduser() if cfg.tensorboard_dir else Path("training_runs") / "tensorboard"
+                tb_dir_base = tb_dir_base if tb_dir_base.is_absolute() else (self.project_root / tb_dir_base)
                 run_name = cfg.wandb_run_name or f"{cfg.model_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 tb_run_dir = tb_dir_base / run_name
                 tb_run_dir.mkdir(parents=True, exist_ok=True)
@@ -181,13 +187,13 @@ class Trainer:
         return {"history": history, "best_metric": self.best_metric, "best_epoch": best_epoch}
 
     def _save_checkpoint(self, epoch: int) -> None:
-        ckpt_path = Path(self.cfg.checkpoints_dir) / "best.pt"
+        ckpt_path = self.checkpoints_dir / "best.pt"
         torch.save({"epoch": epoch, "model_state": self.model.state_dict(), "config": self.cfg.to_dict()}, ckpt_path)
         if self.run:
             self.run.save(str(ckpt_path))
 
     def _load_best_checkpoint(self):
-        ckpt_path = Path(self.cfg.checkpoints_dir) / "best.pt"
+        ckpt_path = self.checkpoints_dir / "best.pt"
         if not ckpt_path.exists():
             self.logger.warning(f"Checkpoint not found at {ckpt_path}")
             return None
@@ -198,7 +204,7 @@ class Trainer:
     def _fit_temperature(self, logits: torch.Tensor, labels: torch.Tensor) -> None:
         self.temperature = TemperatureScaler().to(self.device)
         self.temperature.fit(logits.to(self.device), labels.to(self.device))
-        temp_path = Path(self.cfg.checkpoints_dir) / "temperature.pt"
+        temp_path = self.checkpoints_dir / "temperature.pt"
         self.temperature.save(str(temp_path))
         if self.run:
             self.run.summary["temperature"] = float(self.temperature.temperature.item())

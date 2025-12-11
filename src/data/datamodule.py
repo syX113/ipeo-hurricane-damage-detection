@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -7,6 +8,7 @@ from torchvision.datasets import ImageFolder
 
 from config import TrainConfig
 from data.transforms import build_transforms
+from utils.paths import resolve_project_root
 
 
 class DataModule:
@@ -21,7 +23,10 @@ class DataModule:
         self.test_dataset: Optional[ImageFolder] = None
 
     def setup(self) -> None:
-        root = Path(self.cfg.data_root)
+        data_root = Path(self.cfg.data_root).expanduser()
+        project_root = resolve_project_root()
+        # Resolve data_root relative to the project root to keep notebook and CLI runs aligned
+        root = data_root if data_root.is_absolute() else project_root / data_root
         train_tfms = build_transforms(self.cfg, train=True)
         eval_tfms = build_transforms(self.cfg, train=False)
 
@@ -66,6 +71,12 @@ class DataModule:
         logger = logging.getLogger(__name__)
 
         def coord_key(path: Path) -> str:
+            matches = re.findall(r"(-?\d+\.\d+)", path.stem)
+            if len(matches) >= 2:
+                lat = float(matches[-2])
+                lon = float(matches[-1])
+                # Use coordinates from the filename to catch cross-split reuse even with unique suffixes
+                return f"{lat:.6f}_{lon:.6f}"
             return path.stem
 
         split_datasets = {

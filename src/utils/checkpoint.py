@@ -10,6 +10,7 @@ def load_checkpoint(checkpoint_path: str, map_location: str = "cpu") -> Tuple[to
     # Load model weights and config together for easy restoration
     checkpoint = torch.load(checkpoint_path, map_location=map_location)
     cfg = build_config_from_dict(checkpoint.get("config", {}))
+    cfg.pretrained = False  # Avoid re-downloading base weights when restoring a saved model
     model = build_model(cfg)
     model.load_state_dict(checkpoint["model_state"])
     return model, cfg
