@@ -8,6 +8,7 @@ geopandas
 shapely
 tqdm
 scikit-learn
+optuna
 wandb
 ipywidgets
 tensorboard
