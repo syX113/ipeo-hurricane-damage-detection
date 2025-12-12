@@ -1,0 +1,60 @@
+{
+  "data_root": "/home/tim/repos/ipeo-hurricane-damage-detection/data_resampled",
+  "batch_size": 24,
+  "num_workers": 2,
+  "image_size": 224,
+  "mean": [
+    0.43,
+    0.411,
+    0.374
+  ],
+  "std": [
+    0.218,
+    0.207,
+    0.203
+  ],
+  "horizontal_flip": 0.5,
+  "max_rotation": 15.0,
+  "color_jitter": [
+    0.15,
+    0.15,
+    0.15,
+    0.05
+  ],
+  "balance_strategy": "weighted_sampler",
+  "model_name": "resnet34",
+  "pretrained": true,
+  "num_classes": 2,
+  "dropout": 0.10854424724489735,
+  "in_channels": 3,
+  "freeze_backbone": false,
+  "custom_shuffle_pixels": false,
+  "custom_pointwise_conv": false,
+  "optimizer": "adamw",
+  "lr": 8.268039001312062e-05,
+  "weight_decay": 5.972219244663401e-06,
+  "betas": [
+    0.9,
+    0.999
+  ],
+  "momentum": 0.9,
+  "epochs": 40,
+  "label_smoothing": 0.05,
+  "amp": true,
+  "grad_clip_norm": 1.0,
+  "early_stopping": 8,
+  "checkpoint_metric": "macro_f1",
+  "threshold": 0.5,
+  "reliability_bins": 15,
+  "apply_temperature": false,
+  "checkpoints_dir": "/home/tim/repos/ipeo-hurricane-damage-detection/training_runs/hyperparam_data_resampled_resnet34_20251212-041834/t017_resnet34_lr8.27e-05_wd5.97e-06_do0p11_bs24_img224_s42/artifacts/checkpoints",
+  "wandb_mode": "disabled",
+  "wandb_project": "hurricane-damage",
+  "wandb_entity": null,
+  "wandb_run_name": "hyperparam_data_resampled_resnet34_20251212-041834_t017_resnet34_lr8.27e-05_wd5.97e-06_do0p11_bs24_img224_s42",
+  "wandb_tags": [],
+  "tensorboard": true,
+  "tensorboard_dir": "/home/tim/repos/ipeo-hurricane-damage-detection/training_runs/hyperparam_data_resampled_resnet34_20251212-041834/tensorboard",
+  "seed": 42,
+  "data_integrity_check": false
+}
