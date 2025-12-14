@@ -538,6 +538,76 @@ def plot_channel_histograms(ctx: RunbookContext, channel_stats: Dict[str, np.nda
     plt.show()
 
 
+def compute_label_channel_stats(ctx: RunbookContext, df: pd.DataFrame, splits: Iterable[str] | None = None, sample_size: int | None = None) -> Dict[str, Dict[str, np.ndarray]]:
+    subset = df if splits is None else df[df["split"].isin(splits)]
+    if subset.empty:
+        return {}
+    sample = subset if sample_size is None else subset.sample(min(sample_size, len(subset)), random_state=ctx.seed)
+    stats: Dict[str, Dict[str, np.ndarray]] = {}
+    for label, group in sample.groupby("label"):
+        totals = np.zeros(3, dtype=np.float64)
+        totals_sq = np.zeros(3, dtype=np.float64)
+        counts = 0
+        hist = np.zeros((3, 256), dtype=np.int64)
+        for path in group["path"]:
+            with Image.open(path) as img:
+                arr = np.asarray(img.convert("RGB"), dtype=np.uint8)
+            pixels = arr.reshape(-1, 3)
+            totals += pixels.sum(axis=0)
+            totals_sq += (pixels.astype(np.float64) ** 2).sum(axis=0)
+            counts += pixels.shape[0]
+            for c in range(3):
+                hist[c] += np.bincount(pixels[:, c], minlength=256)
+        if counts == 0:
+            continue
+        means = totals / counts
+        stds = np.sqrt(totals_sq / counts - means**2)
+        stats[label] = {"means": means, "stds": stds, "hist": hist, "counts": counts, "sample_size": len(group)}
+    return stats
+
+
+def label_channel_stats_frame(label_stats: Dict[str, Dict[str, np.ndarray]]) -> pd.DataFrame:
+    rows = []
+    for label, stats in label_stats.items():
+        means = stats.get("means")
+        stds = stats.get("stds")
+        for idx, channel in enumerate(["R", "G", "B"]):
+            rows.append(
+                {
+                    "label": label,
+                    "channel": channel,
+                    "mean": float(means[idx]) if means is not None else None,
+                    "std": float(stds[idx]) if stds is not None else None,
+                    "pixels": int(stats.get("counts", 0)),
+                    "images": int(stats.get("sample_size", 0)),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def plot_label_channel_histograms(ctx: RunbookContext, label_stats: Dict[str, Dict[str, np.ndarray]], dataset_tag: str, subset_name: str = "train_val"):
+    if not label_stats:
+        print("No label channel stats to plot.")
+        return
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
+    channel_labels = ["Red", "Green", "Blue"]
+    for c, ax in enumerate(axes):
+        for label, stats in label_stats.items():
+            hist = stats.get("hist")
+            if hist is None or hist.shape[0] <= c or hist[c].sum() == 0:
+                continue
+            density = hist[c] / hist[c].sum()
+            ax.plot(range(256), density, label=label, color=ctx.label_palette.get(label, None))
+        ax.set_title(f"{channel_labels[c]} histogram ({subset_name})")
+        ax.set_xlabel("Pixel value [0-255]")
+        ax.set_xlim(0, 255)
+    axes[0].set_ylabel("Density [fraction]")
+    axes[-1].legend(title="Label")
+    plt.tight_layout()
+    save_fig(ctx, fig, dataset_tag, f"class_channel_histograms_{subset_name}")
+    plt.show()
+
+
 def brightness_contrast(ctx: RunbookContext, df: pd.DataFrame):
     sample = df if ctx.photo_sample_size is None else df.sample(min(ctx.photo_sample_size, len(df)), random_state=ctx.seed)
     records = []
@@ -575,6 +645,26 @@ def plot_brightness_contrast(ctx: RunbookContext, photo_stats: pd.DataFrame, dat
     axes[1].set_ylabel("Density [fraction]")
     plt.tight_layout()
     save_fig(ctx, fig, dataset_tag, "brightness_contrast_density")
+    plt.show()
+
+
+def plot_brightness_contrast_by_label(ctx: RunbookContext, photo_stats: pd.DataFrame, dataset_tag: str, splits: Iterable[str] | None = None, subset_name: str = "train_val"):
+    subset = photo_stats if splits is None else photo_stats[photo_stats["split"].isin(splits)]
+    if subset is None or subset.empty:
+        print("No brightness/contrast stats available for the requested subset.")
+        return
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    sns.kdeplot(data=subset, x="brightness", hue="label", fill=True, common_norm=False, palette=ctx.label_palette, ax=axes[0])
+    axes[0].set_title(f"Brightness density by label ({subset_name})")
+    axes[0].set_xlabel("Brightness [0-255]")
+    axes[0].set_ylabel("Density [fraction]")
+
+    sns.kdeplot(data=subset, x="contrast", hue="label", fill=True, common_norm=False, palette=ctx.label_palette, ax=axes[1])
+    axes[1].set_title(f"Contrast density by label ({subset_name})")
+    axes[1].set_xlabel("Contrast [0-255]")
+    axes[1].set_ylabel("Density [fraction]")
+    plt.tight_layout()
+    save_fig(ctx, fig, dataset_tag, f"class_brightness_contrast_{subset_name}")
     plt.show()
 
 
