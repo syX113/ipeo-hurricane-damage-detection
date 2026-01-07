@@ -1,0 +1,22 @@
+name: hurricane-inference
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pytorch=2.2.*
+  - torchvision=0.17.*
+  - torchaudio=2.2.*
+  - cpuonly
+  - pip
+  - pip:
+      - gdown>=5.1.0
+      - pillow
+      - pandas
+      - matplotlib
+      - seaborn
+      - numpy<2
+      - scikit-learn
+      - tqdm
+      - ipywidgets
