@@ -5,7 +5,7 @@ The project is based on the paper [*Building Damage Annotation on Post-Hurricane
 ## Quick Links
 - Project Report (PDF): [docs/Report - Hurricane Damage Detection.pdf](docs/Report%20-%20Hurricane%20Damage%20Detection.pdf)
 - Inference Notebook: [inference/inference.ipynb](inference/inference.ipynb)
-- Detailed Notebooks: [notebooks/](notebooks/) (00-05 EDA, CAMs, training, evaluation, comparisons, final run)
+- Detailed Notebooks: [notebooks/](notebooks/) (EDA, Grad CAMS and leakage experiments, model training, evaluation, comparisons, hyperparameter tuning)
 
 ## Table of Contents
 1. [Overview](#1-overview)
