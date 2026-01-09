@@ -24,13 +24,13 @@ Detect building damage after hurricanes while auditing leakage and calibration. 
 ## 2. Report Snapshot
 The report shows that the original Harvey dataset leaks pre/post-event cues and reuses coordinates; a block-based resample collapses duplicates to 14'223 images (Train 12'600 | Val 495 | Test 1'128) to limit overlap. On the original dataset, near-perfect scores are likely shortcut-driven: ConvNeXt-Tiny reaches Macro-F1/Acc. 0.990/0.990, and even pixel-shuffled tiles (geometry destroyed, colors intact) reach ~0.76 Macro-F1. On the resampled dataset, performance drops to more realistic levels (ResNet-50 Macro-F1 0.891, Acc. 0.922); validation-fitted temperature scaling often worsens ECE, and shifting color statistics toward the no_damage domain flips ~35% of damage predictions.
 
-## 3. Run Inference
+## 3. Quickstart (Inference Notebook)
 1. Create the inference env: `conda env create -f inference/environment.yml && conda activate hurricane-inference`.
 2. Open `inference/inference.ipynb` in VS Code/Jupyter from the repo root.
 3. Run cells sequentially. The notebook downloads checkpoints and zipped datasets to `artifacts/` and unpacks `data/` + `data_resampled/` automatically.
 4. Outputs: validation/test metrics for time-detectors and CNN baselines, plus Grad-CAM overlays that mirror the report (use provided sample filenames or pick any from `data_resampled/test`).
 
-## 4. Development Setup
+## 4. Development Setup 
 - Python 3.10 recommended.
 - Install PyTorch/torchvision first (GPU: `pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118`; CPU: `pip install torch torchvision`).
 - Then install project deps: `pip install -r requirements.txt`.
