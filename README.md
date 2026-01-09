@@ -21,8 +21,8 @@ The project is based on the paper [*Building Damage Annotation on Post-Hurricane
 ## 1. Overview
 Detect building damage after hurricanes while auditing leakage and calibration. The repo includes a resampled dataset (via Google Drive), various notebooks, and calibration-aware evaluation.
 
-## 2. Report Snapshot
-The report shows that the original Harvey dataset leaks pre/post-event cues and reuses coordinates; a block-based resample collapses duplicates to 14'223 images (Train 12'600 | Val 495 | Test 1'128) to limit overlap. On the original dataset, near-perfect scores are likely shortcut-driven: ConvNeXt-Tiny reaches Macro-F1/Acc. 0.990/0.990, and even pixel-shuffled tiles (geometry destroyed, colors intact) reach ~0.76 Macro-F1. On the resampled dataset, performance drops to more realistic levels (ResNet-50 Macro-F1 0.891, Acc. 0.922); validation-fitted temperature scaling often worsens ECE, and shifting color statistics toward the no_damage domain flips ~35% of damage predictions.
+## 2. Report Summary
+This project analyzes potential data leakage in a Hurricane Harvey satellite dataset, where spatial redundancy and label-aligned temporal artifacts inflate model performance. A coordinate-aware resampling pipeline was implemented to enforce spatial independence, reducing the dataset size by 38% and eliminating exact-coordinate duplication. Benchmarking shows that near-perfect scores could be influenced by shortcut learning. Counterfactual spectral probes indicate that models function as "Time Detectors," relying on global photometric cues rather than structural damage features. Despite spatial correction, the dataset's intrinsic temporal confounding precludes operational reliability without further controls such as post-event negative sampling.
 
 ## 3. Quickstart (Inference Notebook)
 1. Create the inference env: `conda env create -f inference/environment.yml && conda activate hurricane-inference`.
