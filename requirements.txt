@@ -1,4 +1,10 @@
-# EDA / training deps
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.2.*
+torchvision==0.17.*
+torchaudio==2.2.*
+
+gdown>=5.1.0
 pillow
 pandas
 matplotlib
@@ -12,5 +18,3 @@ optuna
 wandb
 ipywidgets
 tensorboard
-
-# Install PyTorch separately (GPU/CPU instructions in README).
