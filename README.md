@@ -25,8 +25,8 @@ Detect building damage after hurricanes while auditing leakage and calibration. 
 This project analyzes potential data leakage in a Hurricane Harvey satellite dataset, where spatial redundancy and label-aligned temporal artifacts inflate model performance. A coordinate-aware resampling pipeline was implemented to enforce spatial independence, reducing the dataset size by 38% and eliminating exact-coordinate duplication. Benchmarking shows that near-perfect scores could be influenced by shortcut learning. Counterfactual spectral probes indicate that models function as "Time Detectors," relying on global photometric cues rather than structural damage features. Despite spatial correction, the dataset's intrinsic temporal confounding precludes operational reliability without further controls such as post-event negative sampling.
 
 ## 3. Quickstart (Inference Notebook)
-1. Create the inference env: `conda env create -f inference/environment.yml && conda activate hurricane-inference`.
-2. Open `inference/inference.ipynb` in VS Code/Jupyter from the repo root.
+1. Create the inference env: `conda env create -f inference/environment.yml`.
+2. Open `inference/inference.ipynb` in VS Code/Jupyter from the repo root and use the newly created `hurricane-inference` environment to run it.
 3. Run cells sequentially. The notebook downloads checkpoints and zipped datasets to `artifacts/` and unpacks `data/` + `data_resampled/` automatically.
 4. Outputs: validation/test metrics for time-detectors and CNN baselines, plus Grad-CAM overlays that mirror the report (use provided sample filenames or pick any from `data_resampled/test`).
 
